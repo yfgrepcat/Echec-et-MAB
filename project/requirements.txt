@@ -2,3 +2,4 @@ python-chess
 numpy
 matplotlib
 pandas
+torch

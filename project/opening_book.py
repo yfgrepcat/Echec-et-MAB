@@ -1,8 +1,14 @@
 import chess
 from random import choice
+import os
+
+BASE_DIR = os.path.dirname(__file__)
 
 
-def load_openings(path="books/openings.txt"):
+def load_openings(path=None):
+
+    if path is None:
+        path = os.path.join(BASE_DIR, "books", "openings.txt")
 
     openings = []
 
@@ -42,8 +48,9 @@ def apply_random_opening(board, openings):
 
 
 def load_random_middlegame():
+    path = os.path.join(BASE_DIR, "positions", "middlegame_fens.txt")
 
-    with open("positions/middlegame_fens.txt", "r") as f:
+    with open(path, "r") as f:
 
         positions = [
             line.strip()

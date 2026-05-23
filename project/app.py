@@ -9,7 +9,7 @@ import chess
 import chess.engine
 import pandas as pd
 
-from mab_agent import ChessMAB
+from mab_agent import ChessMAB, sanitize_bandit_config
 from time_manager import Clock
 from training import run_training_session
 
@@ -59,6 +59,8 @@ def start_game():
     mode = data.get("mode", "human_vs_mab")
     sf_level = int(data.get("sf_level", 10))
     time_control = data.get("time_control", 300)
+    bandit_type = data.get("bandit_type", "basic_linucb")
+    bandit_config = data.get("bandit_config", None)
     
     game_state["mode"] = mode
     game_state["sf_level"] = sf_level
@@ -77,7 +79,17 @@ def start_game():
     game_state["engine"] = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
     game_state["engine"].configure({"Skill Level": sf_level})
     
-    game_state["mab"] = ChessMAB(game_state["engine"], model_path="models/final_model.npz")
+    try:
+        bandit_config = sanitize_bandit_config(bandit_config)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    game_state["mab"] = ChessMAB(
+        game_state["engine"],
+        model_path="models/final_model.npz",
+        bandit_type=bandit_type,
+        bandit_config=bandit_config,
+    )
     game_state["mab"].load()
     
     if mode == "human_vs_mab":
@@ -238,14 +250,31 @@ def run_train():
     games = int(data.get("games", 10))
     sf_level = int(data.get("sf_level", 10))
     time_control = int(data.get("time_control", 60))
+    bandit_type = data.get("bandit_type", "basic_linucb")
+    bandit_config = data.get("bandit_config", None)
     
     training_state.update({
         "is_training": True, "current_game": 0, "total_games": games,
         "wins": 0, "losses": 0, "draws": 0
     })
     
+    try:
+        bandit_config = sanitize_bandit_config(bandit_config)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     def train_task():
-        run_training_session(worker_id=0, total_games=games, use_openings=True, use_random_positions=False, stockfish_level=sf_level, time_control=time_control, progress_callback=update_training_progress)
+        run_training_session(
+            worker_id=0,
+            total_games=games,
+            use_openings=True,
+            use_random_positions=False,
+            stockfish_level=sf_level,
+            time_control=time_control,
+            bandit_type=bandit_type,
+            bandit_config=bandit_config,
+            progress_callback=update_training_progress,
+        )
         training_state["is_training"] = False
     threading.Thread(target=train_task).start()
     return jsonify({"status": "started"})
