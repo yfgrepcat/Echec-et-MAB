@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echec & MAB</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="glass-panel">
+            <h1>Echec<span class="highlight"> et MAB</span></h1>
+            <p>CATHALA SIMON / FRANCOIS YOANN / CHAVEROUX PIERRE / THOMAS SILVESTRE / PRADIER CORENTIN</p>
+        </header>
+
+        <main class="main-content">
+            <div class="board-section glass-panel">
+                <div id="board" class="chessboard"></div>
+
+                <div class="controls">
+                    <select id="timeControl" class="select-box">
+                        <option value="60">1 min</option>
+                        <option value="180">3 min</option>
+                        <option value="300" selected>5 min</option>
+                        <option value="600">10 min</option>
+                    </select>
+
+                    <select id="gameMode" class="select-box">
+                        <option value="human_vs_mab">Humain vs MAB</option>
+                        <option value="mab_vs_mab">MAB vs MAB</option>
+                        <option value="mab_vs_sf">MAB vs Stockfish</option>
+                    </select>
+
+                    <select id="sfLevel" class="select-box" style="display: none;">
+                        <option value="1">SF Niveau 1</option>
+                        <option value="5">SF Niveau 5</option>
+                        <option value="10" selected>SF Niveau 10</option>
+                        <option value="15">SF Niveau 15</option>
+                        <option value="20">SF Niveau 20</option>
+                    </select>
+
+                    <button id="startBtn" class="btn primary-btn">Nouvelle Partie</button>
+                </div>
+                <div class="status-indicator">
+                    <span class="dot"></span> <span id="status">En attente de démarrage</span>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <div class="tabs glass-panel">
+                    <button class="tab-btn active" data-tab="play">Direct</button>
+                    <button class="tab-btn" data-tab="analysis">Analyse Apprentissage</button>
+                    <button class="tab-btn" data-tab="training">Entraînement</button>
+                    <button class="tab-btn" data-tab="benchmarks">Benchmarks</button>
+                </div>
+
+                <!-- PLAY TAB -->
+                <div id="play-tab" class="tab-content active glass-panel">
+                    <div class="clocks-container">
+                        <div class="clock-box">
+                            <span class="label">Blancs</span>
+                            <span class="value" id="clock-white">05:00</span>
+                        </div>
+                        <div class="clock-box">
+                            <span class="label">Noirs</span>
+                            <span class="value" id="clock-black">05:00</span>
+                        </div>
+                    </div>
+
+                    <h3>Historique de la Partie</h3>
+                    <div id="history-container" class="history-list"></div>
+                    <div class="agent-stats">
+                        <div class="stat-box">
+                            <span class="label">Bras courant</span>
+                            <span class="value" id="current-arm">-</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="label">Temps Agent</span>
+                            <span class="value" id="current-time">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ANALYSIS TAB -->
+                <div id="analysis-tab" class="tab-content glass-panel" style="display: none;">
+                    <h3>Performances (Logs)</h3>
+                    <div class="chart-container">
+                        <canvas id="rewardChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="armChart"></canvas>
+                    </div>
+                    <button id="refreshAnalysis" class="btn secondary-btn">Rafraîchir les données</button>
+                </div>
+
+                <!-- TRAINING TAB -->
+                <div id="training-tab" class="tab-content glass-panel" style="display: none;">
+                    <h3>Lancer un Entraînement</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Entraînez le MAB en arrière-plan contre
+                        Stockfish.</p>
+                    <div class="controls" style="justify-content: flex-start; margin-bottom: 1rem;">
+                        <input type="number" id="trainGames" class="select-box" style="width:120px;" value="10" min="1"
+                            placeholder="Nb parties">
+                        <select id="trainLevel" class="select-box">
+                            <option value="1">SF Niveau 1</option>
+                            <option value="5">SF Niveau 5</option>
+                            <option value="10" selected>SF Niveau 10</option>
+                            <option value="15">SF Niveau 15</option>
+                            <option value="20">SF Niveau 20</option>
+                        </select>
+                        <select id="trainTime" class="select-box">
+                            <option value="60">1 min</option>
+                            <option value="180" selected>3 min</option>
+                            <option value="300">5 min</option>
+                            <option value="600">10 min</option>
+                        </select>
+                        <button id="startTrainBtn" class="btn primary-btn">Lancer</button>
+                    </div>
+
+                    <div id="trainProgressContainer"
+                        style="display: none; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #fbbf24;">
+                        <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Progression de l'entraînement</h4>
+                        <div
+                            style="display: flex; justify-content: space-between; font-size: 1.1rem; margin-bottom: 0.5rem;">
+                            <span>Partie : <strong id="trainGameCount">0/0</strong></span>
+                            <span style="color: #34d399;">Gagnées : <strong id="trainWins">0</strong></span>
+                            <span style="color: #f87171;">Perdues : <strong id="trainLosses">0</strong></span>
+                            <span style="color: #94a3b8;">Nuls : <strong id="trainDraws">0</strong></span>
+                        </div>
+                        <div style="width: 100%; background: rgba(255,255,255,0.1); border-radius: 4px; height: 10px;">
+                            <div id="trainProgressBar"
+                                style="width: 0%; background: #fbbf24; height: 10px; border-radius: 4px; transition: width 0.3s;">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="trainStatus" style="color: #fbbf24; font-weight: bold; margin-bottom: 1rem;"></div>
+
+                    <h3>Évolution par Niveau de SF (50 derniers)</h3>
+                    <div class="chart-container">
+                        <canvas id="levelChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- BENCHMARK TAB -->
+                <div id="benchmarks-tab" class="tab-content glass-panel" style="display: none;">
+                    <h3>Résultats MAB vs SF</h3>
+                    <div style="margin-bottom: 1rem;">
+                        <button id="runBenchBtn" class="btn primary-btn">Lancer le script Benchmark</button>
+                        <span id="benchStatus" style="margin-left: 1rem; color: #fbbf24; font-weight: bold;"></span>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Winrate de MAB face aux différents niveaux
+                        de Stockfish.</p>
+                    <div class="chart-container">
+                        <canvas id="benchmarkChart"></canvas>
+                    </div>
+                    <div class="table-container" style="overflow-x: auto;">
+                        <table id="benchmarkTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Niveau SF</th>
+                                    <th>Victoires</th>
+                                    <th>Défaites</th>
+                                    <th>Nuls</th>
+                                    <th>Winrate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                    <button id="refreshBench" class="btn secondary-btn">Rafraîchir les données</button>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+
+</html>
