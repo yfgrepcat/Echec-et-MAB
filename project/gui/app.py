@@ -319,6 +319,9 @@ def run_benchmark():
     if benchmark_is_running:
         return jsonify({"status": "already_running"})
         
+    data = request.json or {}
+    bandit_type = data.get("bandit_type", "basic_linucb")
+        
     benchmark_is_running = True
     def bench_task():
         global benchmark_is_running
@@ -326,10 +329,9 @@ def run_benchmark():
             sys.executable,
             os.path.join(ROOT_DIR, "experiments", "benchmark_simulate.py"),
             "--simulate",
-            "--runs",
-            "1",
-            "--games-per-run",
-            "2",
+            "--runs", "1",
+            "--games-per-run", "2",
+            "--bandits", bandit_type
         ])
         benchmark_is_running = False
     threading.Thread(target=bench_task).start()

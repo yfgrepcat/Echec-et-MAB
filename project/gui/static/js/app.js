@@ -110,10 +110,11 @@ $('#startBtn').click(() => {
     currentMode = $('#gameMode').val();
     const sfLevel = $('#sfLevel').val();
     const timeControl = parseInt($('#timeControl').val());
+    const banditType = $('#banditType').val();
     
     $.ajax({
         url: '/api/start', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ mode: currentMode, sf_level: sfLevel, time_control: timeControl }),
+        data: JSON.stringify({ mode: currentMode, sf_level: sfLevel, time_control: timeControl, bandit_type: banditType }),
         success: (res) => {
             game.load(res.fen);
             board.position(res.fen);
@@ -246,11 +247,12 @@ $('#startTrainBtn').click(() => {
     const games = $('#trainGames').val();
     const sf = $('#trainLevel').val();
     const tc = parseInt($('#trainTime').val());
+    const banditType = $('#trainBanditType').val();
     $('#trainStatus').text('Entraînement lancé en arrière-plan...');
     $('#trainProgressContainer').show();
     $.ajax({
         url: '/api/train', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({games, sf_level: sf, time_control: tc}),
+        data: JSON.stringify({games, sf_level: sf, time_control: tc, bandit_type: banditType}),
         success: () => {
             if (trainPollInterval) clearInterval(trainPollInterval);
             trainPollInterval = setInterval(pollTrainStatus, 1000);
@@ -259,9 +261,11 @@ $('#startTrainBtn').click(() => {
 });
 
 $('#runBenchBtn').click(() => {
+    const banditType = $('#benchBanditType').val();
     $('#benchStatus').text('Benchmark lancé... (peut prendre du temps)');
     $.ajax({
-        url: '/api/run_benchmark', method: 'POST',
+        url: '/api/run_benchmark', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({bandit_type: banditType}),
         success: () => {
             if (!benchPollInterval) benchPollInterval = setInterval(loadBenchmarks, 3000);
         }

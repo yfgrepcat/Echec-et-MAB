@@ -43,6 +43,11 @@
                         <option value="20">SF Niveau 20</option>
                     </select>
 
+                    <select id="banditType" class="select-box">
+                        <option value="basic_linucb" selected>Basic LinUCB</option>
+                        <option value="neural_linucb">Neural LinUCB</option>
+                    </select>
+
                     <button id="startBtn" class="btn primary-btn">Nouvelle Partie</button>
                 </div>
                 <div class="status-indicator">
@@ -128,6 +133,10 @@
                             <option value="300">5 min</option>
                             <option value="600">10 min</option>
                         </select>
+                        <select id="trainBanditType" class="select-box">
+                            <option value="basic_linucb" selected>Basic LinUCB</option>
+                            <option value="neural_linucb">Neural LinUCB</option>
+                        </select>
                         <button id="startTrainBtn" class="btn primary-btn">Lancer</button>
                     </div>
 
@@ -159,6 +168,10 @@
                 <div id="benchmarks-tab" class="tab-content glass-panel" style="display: none;">
                     <h3>Résultats MAB vs SF</h3>
                     <div style="margin-bottom: 1rem;">
+                        <select id="benchBanditType" class="select-box" style="margin-right: 1rem;">
+                            <option value="basic_linucb" selected>Basic LinUCB</option>
+                            <option value="neural_linucb">Neural LinUCB</option>
+                        </select>
                         <button id="runBenchBtn" class="btn primary-btn">Lancer le script Benchmark</button>
                         <span id="benchStatus" style="margin-left: 1rem; color: #fbbf24; font-weight: bold;"></span>
                     </div>
