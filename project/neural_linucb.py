@@ -40,13 +40,13 @@ class NeuralLinUCB:
         hidden_sizes=(64, 64),              # Hidden layer size, default 2 layers of 64 units (neuron = unit)
         representation_dim: int = 32,       # Dimension of the latent representation (default 32)
         lr: float = 1e-3,                   # Learning rate. Needed to train the encoder network. Default 0.001 for Adam optimizer
-        ridge_lambda: float = 1.0,          # 
-        batch_size: int = 32,
-        train_every: int = 10,
-        replay_size: int = 10000,
-        seed: int = 42,
-        device: str = "auto",
-        force_cpu: bool = False,
+        ridge_lambda: float = 1.0,          # Regularization parameter for the linear regresssion part
+        batch_size: int = 32,               # Number of samples we use to compute the gradient (which is used to update the encoder weights in each training step)
+        train_every: int = 10,              # How often to perform a training step
+        replay_size: int = 10000,           # Maximim size of the replay buffer (number of past interactions stored for training the encoder)
+        seed: int = 42,                     # The seed is for randomness in the algorithm  
+        device: str = "auto",               # Device to run the encoder on
+        force_cpu: bool = False,            # For CPU for weak PC
     ):
 
         self.n_arms = n_arms  # number of actions/arms
