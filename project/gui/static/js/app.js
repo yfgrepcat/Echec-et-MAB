@@ -130,6 +130,12 @@ $('#startBtn').click(() => {
                 setStatus("Simulation auto en cours...", "thinking");
                 triggerAutoMove();
             }
+        },
+        error: (err) => {
+            const message = err.responseJSON?.error || "Impossible de démarrer la partie";
+            setStatus(message, "dot");
+            isPlaying = false;
+            isAgentThinking = false;
         }
     });
 });

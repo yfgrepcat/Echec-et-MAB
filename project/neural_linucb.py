@@ -27,7 +27,7 @@ class RewardEncoder(nn.Module):
 # NeuralLinUCB is a contextual bandit algorithm that uses a neural network to learn a latent representation (lower-dimensional (reducted)) of the context, and then applies LinUCB in that latent space
 # This neural network first turns the original chess context into a smaller learned representation and then the bandit uses a linear UCB on that learned representation instead of on the raw features
 # The goal of this neuralLinUCB is to improve performance in complex contexts by learning a more efficient representation, leading to better exploration/exploitation decisions
-# Implementation of this neural LinUCB is inspired by the paper "Neural Linear Bandits: Overcoming Catastrophic Forgetting through Experience Replay" (https://arxiv.org/abs/1902.02886) and adapted to our chess context and constraints
+# Implementation of this neural LinUCB is inspired by the paper "Neural Linear Bandits: Overcoming Catastrophic Forgetting through Experience Replay" (https://arxiv.org/pdf/1901.08612) and adapted to our chess context and constraints
 # Copilot helped a lot to impement this class
 class NeuralLinUCB:
 
@@ -45,7 +45,7 @@ class NeuralLinUCB:
         train_every: int = 10,              # Perform a training step every N updates
         replay_size: int = 10000,           # Maximum size of the replay buffer
         seed: int = 42,                     # Random seed for reproducibility
-        device: str = "auto",             # Device hint for torch: 'auto'|'cpu'|'cuda'|'mps'
+        device: str = "auto",               # Device hint for torch: 'auto'|'cpu'|'cuda'|'mps'
         force_cpu: bool = False,            # If True, force CPU even when GPU is available
     ):
 

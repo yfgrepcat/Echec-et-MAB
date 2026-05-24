@@ -59,14 +59,23 @@ ENGINE_PATH = shutil.which("stockfish") or str(ROOT_DIR / "bin" / "stockfish")
 
 
 def create_game_engine(skill_level: int):
-    """Create a chess engine for the GUI, falling back to DummyEngine when Stockfish is unavailable."""
+    """Create the GUI chess engine.
+
+    The GUI should not silently fall back to a random engine; if Stockfish is
+    unavailable, we raise an explicit error so the UI can surface the problem.
+    """
+    if not ENGINE_PATH or not os.path.exists(ENGINE_PATH):
+        raise RuntimeError(
+            "Stockfish introuvable. Installez-le ou placez le binaire dans le PATH."
+        )
     try:
         engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
         engine.configure({"Skill Level": skill_level})
         return engine
-    except FileNotFoundError:
-        print("Warning: Stockfish not found; using DummyEngine in the GUI.")
-        return DummyEngine(skill_level=skill_level)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"Impossible de lancer Stockfish depuis {ENGINE_PATH}."
+        ) from exc
 
 @app.route("/")
 def index():
@@ -95,7 +104,10 @@ def start_game():
         except:
             pass
             
-    game_state["engine"] = create_game_engine(sf_level)
+    try:
+        game_state["engine"] = create_game_engine(sf_level)
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
     
     try:
         bandit_config = sanitize_bandit_config(bandit_config)
