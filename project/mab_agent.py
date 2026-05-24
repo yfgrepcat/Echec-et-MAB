@@ -9,36 +9,23 @@ from basic_linucb import LinUCB
 from utils.utils import material_balance, is_endgame
 from utils.time_manager import TimeManager
 
-
+# Method used to sanitze the configuration so we can ensure that the config is valid, especially useful for the neural LinUCB
+# Without sanitization, our first tests showed that the agent would break easily if errors in configuration are hidden
+# Format of bandit config : {TODO}
+# Recognized keys:
+#   - device: one of 'auto' (default), 'cpu' (to force CPU usage - No GPU), 'cuda' (to force CUDA usage - NVIDIA GPUs), 'mps' (to force Metal Performance Shaders usage - Apple Silicon)
+#   - force_cpu: bool (needed to make the agent work on N7's portable PC without GPU)
 def sanitize_bandit_config(bandit_config: dict | None) -> dict:
-    """Validate and normalize bandit_config for downstream use.
-
-    Recognized keys:
-      - device: one of 'auto', 'cpu', 'cuda', 'mps'
-      - force_cpu: bool
-
-    Returns a sanitized dict with defaults applied.
-    Raises ValueError on invalid values.
-    """
-    cfg = {} if bandit_config is None else dict(bandit_config)
-
-    # device
-    device = cfg.get("device", "auto")
-    if device is None:
-        device = "auto"
-    if not isinstance(device, str):
-        raise ValueError("bandit_config.device must be a string")
-    device = device.lower()
-    if device not in ("auto", "cpu", "cuda", "mps"):
+    cfg = {} if bandit_config is None else dict(bandit_config)                                  # Copy of the config
+    device = cfg.get("device", "auto")                                                          # Default to 'auto' to let the library choose the best hardware available (GPU if possible, else CPU)
+    if device is None: device = "auto"                                                          # Handle None value for device, treat it as 'auto'
+    device = device.lower()                                                                     # Normalize device string to lowercase for consistency          
+    if device not in ("auto", "cpu", "cuda", "mps"):                                            # Raise an error if the key is not recognized
         raise ValueError("bandit_config.device must be one of 'auto','cpu','cuda','mps'")
-
-    # force_cpu
-    force_cpu = cfg.get("force_cpu", False)
-    if not isinstance(force_cpu, bool):
-        # allow truthy/falsy values
-        force_cpu = bool(force_cpu)
-
-    return {"device": device, "force_cpu": force_cpu}
+    force_cpu = cfg.get("force_cpu", False)                                                     # Handling weak PCs
+    if not isinstance(force_cpu, bool):                                                         
+        raise ValueError("bandit_config.force_cpu must be a boolean")
+    return {"device": device, "force_cpu": force_cpu}                                           # Return sanitized config 
 
 # ChessMAB is our implementation of the multi-armed bandit agent
 # It will use the LinUCB algorithm (above) with or without a neural network to select moves during an awsome game of chess
@@ -53,7 +40,6 @@ class ChessMAB:
         self.bandit_config = bandit_config or {}    # Configuration for the bandit algorithm
         self.n_features = 7                         # 7 features for the context (legal moves, time left, move number, material balance, is endgame, is in check, captures)
         self.n_arms = 4                             # 4 arms corresponding to 4 time budget categories (very short (0), short (1), medium (2), long (3)) 
-       
         match self.bandit_type:                     
             case "basic_linucb":                                        # Basic one without neural network
                 self.bandit = LinUCB(self.n_arms, self.n_features)      
@@ -65,7 +51,6 @@ class ChessMAB:
                 )
             case _:                                                     # Default so guess what, basic LinUCB again
                 self.bandit = LinUCB(self.n_arms, self.n_features)
-
         self.time_manager = TimeManager()                               # Time manager to compute time budgets for each move based on the selected arm and the remaining time, legal moves, etc. 
                                                                         # It will use a heuristic approach to compute the time budget for each arm (very short, short, medium, long) based on the game phase, number of legal moves, and remaining time
         self.load()                                                     # Load model parameters from file if it exists, otherwise initialize a new model
@@ -77,7 +62,6 @@ class ChessMAB:
             # delegate save to neural implementation
             self.bandit.save(self.model_path)
             return
-
         temp_path = self.model_path + ".tmp.npz"                        # Save to as temporary file first to avoid corruption of the model original file
         np.savez(temp_path, A_inv=self.bandit.A_inv, b=self.bandit.b)   # Save the model parameters (A_inv and b for each arm)
         os.replace(temp_path, self.model_path)                          # Replace original model file by the new one
@@ -95,7 +79,6 @@ class ChessMAB:
                 except Exception:
                     print("Failed to load neural model; continuing with fresh model.")
                 return
-
             data = np.load(self.model_path)                             # Load the model parameters from the .npz file
             self.bandit.A_inv = list(data['A_inv'])                     # Set A_inv for each arm from the loaded data
             self.bandit.b = list(data['b'])                             # Set b for each arm from the loaded data                 

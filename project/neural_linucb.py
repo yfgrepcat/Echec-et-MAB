@@ -24,17 +24,23 @@ class RewardEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)  # return latent representation
 
+# NeuralLinUCB is a contextual bandit algorithm that uses a neural network to learn a latent representation (lower-dimensional (reducted)) of the context, and then applies LinUCB in that latent space
+# This neural network first turns the original chess context into a smaller learned representation and then the bandit uses a linear UCB on that learned representation instead of on the raw features
+# The goal of this neuralLinUCB is to improve performance in complex contexts by learning a more efficient representation, leading to better exploration/exploitation decisions
+# Implementation of this neural LinUCB is inspired by the paper "Neural Linear Bandits: Overcoming Catastrophic Forgetting through Experience Replay" (https://arxiv.org/abs/1902.02886) and adapted to our chess context and constraints
+# Copilot helped a lot to impement this class
 class NeuralLinUCB:
 
+    # Init method to create the neural LinUCB 
     def __init__(
         self,
-        n_arms: int,
-        n_features: int,
-        alpha: float = 1.5,
-        hidden_sizes=(64, 64),
-        representation_dim: int = 32,
-        lr: float = 1e-3,
-        ridge_lambda: float = 1.0,
+        n_arms: int,                        # Number of arms (actions)
+        n_features: int,                    # Input features 
+        alpha: float = 1.5,                 # Exploration parameter (just like in basic LinUCB)
+        hidden_sizes=(64, 64),              # Hidden layer size, default 2 layers of 64 units (neuron = unit)
+        representation_dim: int = 32,       # Dimension of the latent representation (default 32)
+        lr: float = 1e-3,                   # Learning rate. Needed to train the encoder network. Default 0.001 for Adam optimizer
+        ridge_lambda: float = 1.0,          # 
         batch_size: int = 32,
         train_every: int = 10,
         replay_size: int = 10000,
