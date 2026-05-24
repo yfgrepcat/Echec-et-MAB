@@ -4,6 +4,7 @@ import json
 import os
 import random
 import sys
+import argparse
 from pathlib import Path
 
 # Adjust if necessary to point to your personnal .venv bin directory
@@ -61,7 +62,7 @@ class DummyEngine:
 
 # 
 def run_training_session(
-    worker_id=0,
+    worker_id="0",
     total_games=100,
     use_openings=False,
     use_random_positions=True,
@@ -73,7 +74,8 @@ def run_training_session(
     progress_callback=None
 ):
 
-    log_file = str(BASE_DIR / "logs" / f"games_worker_{worker_id}.jsonl")
+    worker_tag = str(worker_id)
+    log_file = str(BASE_DIR / "logs" / f"games_worker_{worker_tag}.jsonl")
 
     # Try to start Stockfish engine. If not available and `simulate` is True,
     # fall back to a dummy engine that picks random legal moves. Otherwise,
@@ -91,7 +93,7 @@ def run_training_session(
                 "Stockfish engine not found in PATH. Install stockfish or run with --simulate to use a dummy engine."
             )
 
-    model_path = str(BASE_DIR / "models" / f"worker_{worker_id}.npz")
+    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")
 
     # validate/normalize bandit_config before creating the agent
     try:
@@ -141,7 +143,7 @@ def run_training_session(
             sf_clock = Clock(time_control)
 
             print(
-                f"[Worker {worker_id}] "
+                f"[Worker {worker_tag}] "
                 f"Game {game_id + 1}/{total_games}"
             )
 
@@ -159,7 +161,7 @@ def run_training_session(
                     )
 
                     log = {
-                        "worker": worker_id,
+                        "worker": worker_tag,
                         "game": game_id,
                         "ply": board.ply(),
                         "move": board.san(move),
@@ -200,7 +202,7 @@ def run_training_session(
                 if mab_clock.flag():
 
                     print(
-                        f"[Worker {worker_id}] "
+                        f"[Worker {worker_tag}] "
                         f"Flagged on time."
                     )
 
@@ -209,8 +211,43 @@ def run_training_session(
                 if progress_callback:
                     progress_callback(game_id + 1, total_games, None)
 
+            # Save the current model after each game so training is persisted continuously.
+            try:
+                mab.save()
+            except Exception as e:
+                print(f"[Worker {worker_tag}] Warning: could not save model after game {game_id + 1}: {e}")
+
     finally:
         try:
             engine.quit()
         except Exception:
             pass
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Chessomatic bandits against Stockfish.")
+    parser.add_argument("--worker-id", type=str, default="0")
+    parser.add_argument("--total-games", type=int, default=100)
+    parser.add_argument("--use-openings", action="store_true")
+    parser.add_argument("--no-random-positions", action="store_true", help="Start from the initial board instead of a random middlegame.")
+    parser.add_argument("--stockfish-level", type=int, default=10)
+    parser.add_argument("--time-control", type=int, default=60)
+    parser.add_argument("--bandit-type", default="basic_linucb", choices=["basic_linucb", "neural_linucb"])
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--force-cpu", action="store_true")
+    parser.add_argument("--simulate", action="store_true", help="Use DummyEngine if Stockfish is unavailable.")
+    args = parser.parse_args()
+
+    bandit_config = sanitize_bandit_config({"device": args.device, "force_cpu": bool(args.force_cpu)})
+
+    run_training_session(
+        worker_id=args.worker_id,
+        total_games=args.total_games,
+        use_openings=args.use_openings,
+        use_random_positions=not args.no_random_positions,
+        stockfish_level=args.stockfish_level,
+        time_control=args.time_control,
+        bandit_type=args.bandit_type,
+        bandit_config=bandit_config,
+        simulate=args.simulate,
+    )

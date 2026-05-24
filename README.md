@@ -16,8 +16,45 @@ chmod +x project/bin/stockfish
 rm -rf "$tmpdir"
 ```
 
-## Run
+## Run the app 
 
 ```bash
 python project/gui/app.py
+```
+
+## Run training 
+
+### Basic LinUCB
+
+```bash
+python project/experiments/benchmark.py \
+  --bandit-type basic_linucb \
+  --model-path project/models/worker_0.pkl
+```
+
+### Neural LinUCB 
+
+```bash
+python project/experiments/training.py \
+  --bandit-type neural_linucb \
+  --worker-id run_neural_v1 \
+  --total-games 100
+```
+
+## Run Benchmark 
+
+### Basic LinUCB
+
+```bash
+python project/experiments/benchmark.py \
+  --bandit-type basic_linucb \
+  --model-path project/models/worker_0.pkl
+```
+
+### Neural LinUCB 
+
+```bash
+python project/experiments/benchmark.py \
+  --bandit-type neural_linucb \
+  --model-path project/models/worker_0.pkl
 ```
