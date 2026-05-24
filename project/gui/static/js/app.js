@@ -10,7 +10,7 @@ const $history = $('#history-container');
 const $currentArm = $('#current-arm');
 const $currentTime = $('#current-time');
 
-let rewardChart, armChart, benchChart, levelChart, phaseChart;
+let rewardChart, armChart, armTimeChart, benchChart, levelChart, phaseChart;
 
 let whiteTime = 300;
 let blackTime = 300;
@@ -25,6 +25,19 @@ function formatTime(seconds) {
     return `${m}:${s}`;
 }
 
+function handleGameOver(resultText) {
+    if (!isPlaying) return;
+    isPlaying = false;
+    isAgentThinking = false;
+    setStatus("Partie terminée : " + resultText, "dot");
+    $('#gameOverMessage').text(resultText);
+    $('#gameOverModal').fadeIn();
+}
+
+$('#closeModalBtn').click(() => {
+    $('#gameOverModal').fadeOut();
+});
+
 function startLiveClock() {
     if (clockInterval) clearInterval(clockInterval);
     lastTick = Date.now();
@@ -37,9 +50,11 @@ function startLiveClock() {
         if (activeTurn === 'w') {
             whiteTime = Math.max(0, whiteTime - delta);
             $('#clock-white').text(formatTime(whiteTime));
+            if (whiteTime <= 0) handleGameOver("Temps écoulé (Les Noirs gagnent)");
         } else {
             blackTime = Math.max(0, blackTime - delta);
             $('#clock-black').text(formatTime(blackTime));
+            if (blackTime <= 0) handleGameOver("Temps écoulé (Les Blancs gagnent)");
         }
     }, 100);
 }
@@ -133,8 +148,7 @@ function sendHumanMove(uci) {
             updateClocks(res);
             
             if (res.game_over) {
-                isPlaying = false;
-                setStatus("Partie terminée : " + res.result, "dot");
+                handleGameOver(res.result);
             } else {
                 triggerAutoMove();
             }
@@ -166,8 +180,7 @@ function triggerAutoMove() {
             }
             
             if (res.game_over) {
-                isPlaying = false; isAgentThinking = false;
-                setStatus("Partie terminée : " + res.result, "dot");
+                handleGameOver(res.result);
             } else {
                 if (currentMode === "human_vs_mab") {
                     isAgentThinking = false;
@@ -279,6 +292,19 @@ function loadAnalysis() {
             },
             options: { responsive: true }
         });
+        
+        if (res.arm_time_stats) {
+            const ctxArmTime = document.getElementById('armTimeChart').getContext('2d');
+            if (armTimeChart) armTimeChart.destroy();
+            armTimeChart = new Chart(ctxArmTime, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(res.arm_time_stats).map(a => "Bras " + a),
+                    datasets: [{ label: 'Temps Moyen (s)', data: Object.values(res.arm_time_stats), backgroundColor: ['#818cf8', '#34d399', '#fbbf24', '#f87171'] }]
+                },
+                options: { responsive: true }
+            });
+        }
         
         if (res.level_stats) {
             const ctxLevel = document.getElementById('levelChart').getContext('2d');

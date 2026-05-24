@@ -110,12 +110,16 @@ class ChessMAB:
             chess.engine.Limit(depth=depth)                         # Depth is the number of moves the engine will look ahead to evaluate the position. 8 for average good balance
         )
         score = info["score"].white()                               # Get the score from analysis. (positive = white advantage, negative = black advantage)
+        
+        # Ajuste le score pour le joueur actuel
+        if board.turn == chess.BLACK:
+            score = -score  # Inverse si c'est le tour des noirs
+            
         if score.is_mate():
-            mate_moves = score.mate()                               # mate() returns the number of half-moves (ply) until mate, from the perspective of the current player, Positive = current player wins, Negative = current player loses (is mated)
-            eval_cp = 10000 if mate_moves > 0 else -10000           # Convert mate score to centipawns. The sign depends on who is to move:
-                                                                    #   - If mate_moves > 0: current player wins in |mate_moves| moves → high positive/negative score
-                                                                    #   - If mate_moves < 0: current player loses in |mate_moves| moves → high negative/positive score
-                                                                    # We use 10000 * sign(mate_moves) to give a large magnitude, but ideally we should scale by mate distance
+            mate_moves = score.mate()
+            if board.turn == chess.BLACK:
+                mate_moves = -mate_moves  # Ajuste aussi pour les mats
+            eval_cp = 10000 if mate_moves > 0 else -10000
         else:
             eval_cp = score.score()                                 # If it's not a mate score, we take the centipawn evaluation directly (positive if white is better, negative if black is better)
         wdl = 1.0 / (1.0 + 10.0 ** (-eval_cp / 400.0))              # Convert centipawn score to WDL (Win/Draw/Loss) probability using a logistic function.
@@ -142,11 +146,11 @@ class ChessMAB:
 
     # Method to compute the reward for a move based on the change in position evaluation before and after the move, and the time taken to play the move
     def compute_reward(self, board, move, elapsed):
-        score_before = self.evaluate(board, depth=8)            # Evaluate the position before playing the move 
+        score_before = self.evaluate(board, depth=8)            # Evaluate the position before playing the move (Perspective: Joueur A)
         board.push(move)                                        # Play the move on the board     
-        score_after = self.evaluate(board, depth=8)             # Evaluate the position after playing the move
+        score_after = self.evaluate(board, depth=8)             # Evaluate the position after playing the move (Perspective: Joueur B)
         board.pop()                                             # Undo the move to restore the original position (for other move evaluations)                        
-        delta_wdl = score_after - score_before                  # Positive delta = improved position, Negative delta = worsened position, 0 = no change
+        delta_wdl = (1.0 - score_after) - score_before          # On ajuste car score_after est du point de vue de B. 1 - score_after redonne la probabilité pour A.
         quality = delta_wdl * 10.0                              # Normalize the reward by a factor 10 to give more weight to the move
         reward = (                              
             2.0 * quality                                       # 

@@ -54,7 +54,8 @@ def update_training_progress(current, total, result):
     else:
         training_state["draws"] += 1
 
-ENGINE_PATH = str(ROOT_DIR / "bin" / "stockfish")
+import shutil
+ENGINE_PATH = shutil.which("stockfish") or str(ROOT_DIR / "bin" / "stockfish")
 
 
 def create_game_engine(skill_level: int):
@@ -189,7 +190,8 @@ def auto_move():
             "clock_left": round(active_clock.time_left, 2)
         }
     else:
-        result = engine.play(board, chess.engine.Limit(depth=6))
+        limit = chess.engine.Limit(white_clock=game_state["white_clock"].time_left, black_clock=game_state["black_clock"].time_left)
+        result = engine.play(board, limit)
         move = result.move
         elapsed = time.time() - start_time
         active_clock.spend(elapsed)
@@ -254,12 +256,20 @@ def get_analysis():
         df_phase['phase_jeu'] = (df_phase['move_number'] // 5) * 5
         phase_data = df_phase.groupby('phase_jeu')['elapsed'].mean()
         phase_stats = {int(k): round(float(v), 2) for k, v in phase_data.items()}
+        
+    arm_time_stats = {}
+    if "arm" in df.columns and "elapsed" in df.columns:
+        arm_time_df = df[df["arm"] != "-"]
+        if not arm_time_df.empty:
+            arm_time_data = arm_time_df.groupby("arm")["elapsed"].mean()
+            arm_time_stats = {str(k): round(float(v), 2) for k, v in arm_time_data.items()}
     
     return jsonify({
         "arm_counts": arm_counts,
         "recent_rewards": recent_rewards,
         "level_stats": level_stats,
-        "phase_stats": phase_stats
+        "phase_stats": phase_stats,
+        "arm_time_stats": arm_time_stats
     })
 
 @app.route("/api/train", methods=["POST"])

@@ -8,7 +8,8 @@ from pathlib import Path
 
 # Adjust if necessary to point to your personnal .venv bin directory
 BASE_DIR = Path(__file__).resolve().parent.parent              # Base directory of the project
-ENGINE_PATH = str(BASE_DIR / "bin" / "stockfish")       # Path to Stockfish bin 
+import shutil
+ENGINE_PATH = shutil.which("stockfish") or str(BASE_DIR / "bin" / "stockfish")       # Path to Stockfish bin 
 TIME_CONTROL = 60                                       # Seconds per player for sthe training games
 
 if str(BASE_DIR) not in sys.path:

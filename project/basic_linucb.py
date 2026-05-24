@@ -48,8 +48,11 @@ class LinUCB:
                                                             #       - if we have observed many contexts similar to x for arm a, A_a will have large values in the directions of those contexts, making A_a^-1 small in those directions
                                                             #       - if we have observed few contexts similar to x for arm a, A_a will have small values in the directions of those contexts, making A_a^-1 large in those directions, increasing the uncertainty and encouraging exploration 
             p_values.append(p.item())                       # Append the computed UCB value for arm a to the list of p_values
-        return int(np.argmax(p_values))                     # Return the index of the arm with the highest UCB value, which is the arm selected by the algorithm (int for compatibility with indexing)
-
+        
+        max_p = max(p_values)
+        best_arms = [i for i, v in enumerate(p_values) if v == max_p]
+        import random
+        return int(random.choice(best_arms))                # Return a random choice among the arms with the highest UCB value to avoid sticking to arm 0 at start
     # Method to update the model parameters after observing a reward for an arm given a context
     def update(self, arm, x, reward):
         num = (self.A_inv[arm] @ x) @ (x.T @ self.A_inv[arm])       # num is the matrix used to update A_a^-1 after observing a reward for arm a given context x, 

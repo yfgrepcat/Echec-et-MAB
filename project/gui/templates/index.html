@@ -83,6 +83,10 @@
                             <span class="value" id="current-time">-</span>
                         </div>
                     </div>
+                    <div class="arm-info" style="margin-top: 1rem; padding: 0.8rem; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 0.9rem; color: #cbd5e1;">
+                        <strong>ℹ️ Info Bras :</strong> Le temps calculé dépend de la position. Le bras agit comme multiplicateur :
+                        <br>Bras 0 (x0.5), Bras 1 (x1), Bras 2 (x2), Bras 3 (x4).
+                    </div>
                 </div>
 
                 <!-- ANALYSIS TAB -->
@@ -93,6 +97,12 @@
                     </div>
                     <div class="chart-container">
                         <canvas id="armChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="armTimeChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="phaseChart"></canvas>
                     </div>
                     <button id="refreshAnalysis" class="btn secondary-btn">Rafraîchir les données</button>
                 </div>
@@ -177,6 +187,15 @@
 
             </div>
         </main>
+    </div>
+
+    <!-- Modal de Fin de Partie -->
+    <div id="gameOverModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content glass-panel">
+            <h2 id="gameOverTitle">Partie Terminée</h2>
+            <p id="gameOverMessage">Le résultat de la partie s'affichera ici.</p>
+            <button id="closeModalBtn" class="btn primary-btn" style="margin-top: 1rem;">Fermer</button>
+        </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>

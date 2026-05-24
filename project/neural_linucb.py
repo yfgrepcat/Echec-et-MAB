@@ -103,7 +103,11 @@ class NeuralLinUCB:
             mean_reward = float((theta.T @ z).item())  # scalar mean
             uncertainty = np.sqrt((z.T @ self.A_inv[arm] @ z).item())  # scalar std
             scores[arm] = mean_reward + self.alpha * uncertainty  # UCB score
-        return int(np.argmax(scores))  # choose arm with highest score
+            
+        max_score = np.max(scores)
+        best_arms = [i for i, v in enumerate(scores) if v == max_score]
+        import random
+        return int(random.choice(best_arms))  # choose random arm among highest scores
 
     def update(self, arm: int, x, reward: float):
         x1d = self._flatten_context(x)  # prepare context
