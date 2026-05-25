@@ -9,38 +9,56 @@ from basic_linucb import LinUCB
 from utils.utils import material_balance, is_endgame
 from utils.time_manager import TimeManager
 
-#TODO: Use Pydantic for validation.
-def sanitize_bandit_config(bandit_config: dict | None) -> dict:
-    """ Method used to sanitize the bandit configuration, ensuring that the provided configuration is valid and contains recognized keys with appropriate values. This is especially important for the neural LinUCB implementation, which may have specific requirements for hardware usage (e.g., GPU vs CPU). The method checks for the presence of expected keys, validates their values, and provides defaults when necessary. It raises errors if unrecognized keys are found or if values are of incorrect types, helping to prevent silent failures or misconfigurations that could lead to suboptimal performance or crashes during training.
 
-    :param bandit_config: Configuration dictionary for the bandit algorithm, which may include keys like 'device' 
-        to specify hardware usage (e.g., 'auto', 'cpu', 'cuda', 'mps') and 'force_cpu' 
-        to indicate whether to force CPU usage even if a GPU is available. 
-        This allows users to customize the behavior of the neural LinUCB implementation 
+# TODO: Use Pydantic for validation.
+def sanitize_bandit_config(bandit_config: dict | None) -> dict:
+    """Method used to sanitize the bandit configuration, ensuring that the provided configuration is valid and contains recognized keys with appropriate values. This is especially important for the neural LinUCB implementation, which may have specific requirements for hardware usage (e.g., GPU vs CPU). The method checks for the presence of expected keys, validates their values, and provides defaults when necessary. It raises errors if unrecognized keys are found or if values are of incorrect types, helping to prevent silent failures or misconfigurations that could lead to suboptimal performance or crashes during training.
+
+    :param bandit_config: Configuration dictionary for the bandit algorithm, which may include keys like 'device'
+        to specify hardware usage (e.g., 'auto', 'cpu', 'cuda', 'mps') and 'force_cpu'
+        to indicate whether to force CPU usage even if a GPU is available.
+        This allows users to customize the behavior of the neural LinUCB implementation
         based on their hardware capabilities and preferences.
     :type bandit_config: dict | None
     :raises ValueError: If invalid values for 'device' or 'force_cpu'.
     :return: Sanitized configuration dictionary with validated and defaulted values for the bandit algorithm.
     :rtype: dict
     """
-    cfg = {} if bandit_config is None else dict(bandit_config) # Copy of the config
-    device = cfg.get("device", "auto") # Default to 'auto' to let the library choose the best hardware available (GPU if possible, else CPU)
-    if device is None: device = "auto" # Handle None value for device, treat it as 'auto'
-    device = device.lower() # Normalize device string to lowercase for consistency          
-    if device not in ("auto", "cpu", "cuda", "mps"): # Raise an error if the key is not recognized
-        raise ValueError("bandit_config.device must be one of 'auto','cpu','cuda','mps'")
-    force_cpu = cfg.get("force_cpu", False) # Handling weak PCs
-    if not isinstance(force_cpu, bool):                                                         
+    cfg = {} if bandit_config is None else dict(bandit_config)  # Copy of the config
+    device = cfg.get(
+        "device", "auto"
+    )  # Default to 'auto' to let the library choose the best hardware available (GPU if possible, else CPU)
+    if device is None:
+        device = "auto"  # Handle None value for device, treat it as 'auto'
+    device = device.lower()  # Normalize device string to lowercase for consistency
+    if device not in (
+        "auto",
+        "cpu",
+        "cuda",
+        "mps",
+    ):  # Raise an error if the key is not recognized
+        raise ValueError(
+            "bandit_config.device must be one of 'auto','cpu','cuda','mps'"
+        )
+    force_cpu = cfg.get("force_cpu", False)  # Handling weak PCs
+    if not isinstance(force_cpu, bool):
         raise ValueError("bandit_config.force_cpu must be a boolean")
-    return {"device": device, "force_cpu": force_cpu} # Return sanitized config 
+    return {"device": device, "force_cpu": force_cpu}  # Return sanitized config
+
 
 class ChessMAB:
-    def __init__(self, engine, model_path="models/final_model.npz", bandit_config: dict | None = None, bandit_type="basic_linucb"):
-        """ Initialize the ChessMAB agent with the chess engine, model path, bandit type and configuration. 
-        The constructor sets up the chess engine for move generation and position evaluation, 
-        initializes the bandit algorithm based on the specified type (basic LinUCB or neural LinUCB), 
-        and prepares the time manager for computing time budgets. 
-        It also attempts to load existing model parameters from the specified file path, 
+    def __init__(
+        self,
+        engine,
+        model_path="models/final_model.npz",
+        bandit_config: dict | None = None,
+        bandit_type="basic_linucb",
+    ):
+        """Initialize the ChessMAB agent with the chess engine, model path, bandit type and configuration.
+        The constructor sets up the chess engine for move generation and position evaluation,
+        initializes the bandit algorithm based on the specified type (basic LinUCB or neural LinUCB),
+        and prepares the time manager for computing time budgets.
+        It also attempts to load existing model parameters from the specified file path,
         allowing for continued training or evaluation from a previously saved state.
 
         :param engine: Chess engine instance used for move generation and position evaluation.
@@ -57,37 +75,43 @@ class ChessMAB:
         self.model_path = model_path
         self.bandit_type = bandit_type
         self.bandit_config = bandit_config or {}
-        self.n_features = 7 # 7 features for the context (legal moves, time left, move number, material balance, is endgame, is in check, captures)
-        self.n_arms = 4 # 4 arms corresponding to 4 time budget categories (very short (0), short (1), medium (2), long (3)) 
-        match self.bandit_type:                     
+        self.n_features = 7  # 7 features for the context (legal moves, time left, move number, material balance, is endgame, is in check, captures)
+        self.n_arms = 4  # 4 arms corresponding to 4 time budget categories (very short (0), short (1), medium (2), long (3))
+        match self.bandit_type:
             case "basic_linucb":
-                self.bandit = LinUCB(self.n_arms, self.n_features)      
-            case "neural_linucb": # With neural network to learn a better representation of the context features                                   
+                self.bandit = LinUCB(self.n_arms, self.n_features)
+            case "neural_linucb":  # With neural network to learn a better representation of the context features
                 self.bandit = NeuralLinUCB(
                     n_arms=self.n_arms,
                     n_features=self.n_features,
                     **self.bandit_config,
                 )
-        self.time_manager = TimeManager() # Time manager to compute time budgets for each move based on the selected arm and the remaining time, legal moves, etc. 
+        self.time_manager = TimeManager()  # Time manager to compute time budgets for each move based on the selected arm and the remaining time, legal moves, etc.
         self.load()
 
     def save(self):
         """
-        Save the model parameters to a file. For the basic LinUCB implementation, it saves the A_inv and b parameters for each arm in a .npz file. 
-        For the neural LinUCB implementation, it delegates the saving process to the neural bandit's own save method, 
+        Save the model parameters to a file. For the basic LinUCB implementation, it saves the A_inv and b parameters for each arm in a .npz file.
+        For the neural LinUCB implementation, it delegates the saving process to the neural bandit's own save method,
         The method ensures that the model is saved safely by writing to a temporary file first and then replacing the original file, reducing the risk of corruption during the save process.
         """
         if self.bandit_type == "neural_linucb":
             # delegate save to neural implementation
             self.bandit.save(self.model_path)
             return
-        temp_path = self.model_path + ".tmp.npz" # Save to as temporary file first to avoid corruption of the model original file
-        np.savez(temp_path, A_inv=self.bandit.A_inv, b=self.bandit.b) # Save the model parameters (A_inv and b for each arm)
-        os.replace(temp_path, self.model_path) # Replace original model file by the new one
+        temp_path = (
+            self.model_path + ".tmp.npz"
+        )  # Save to as temporary file first to avoid corruption of the model original file
+        np.savez(
+            temp_path, A_inv=self.bandit.A_inv, b=self.bandit.b
+        )  # Save the model parameters (A_inv and b for each arm)
+        os.replace(
+            temp_path, self.model_path
+        )  # Replace original model file by the new one
 
     def load(self):
         """
-        Load the model parameters from a file if it exists. 
+        Load the model parameters from a file if it exists.
         For the basic LinUCB implementation, it loads the A_inv and b parameters for each arm from a .npz file.
         """
         if not os.path.exists(self.model_path):
@@ -100,16 +124,20 @@ class ChessMAB:
                 except Exception:
                     print("Failed to load neural model; continuing with fresh model.")
                 return
-            data = np.load(self.model_path) # Load the model parameters from the .npz file
-            self.bandit.A_inv = list(data['A_inv']) # Set A_inv for each arm from the loaded data
-            self.bandit.b = list(data['b']) # Set b for each arm from the loaded data                 
-            print(f"Loaded model: {self.model_path}")   
+            data = np.load(
+                self.model_path
+            )  # Load the model parameters from the .npz file
+            self.bandit.A_inv = list(
+                data["A_inv"]
+            )  # Set A_inv for each arm from the loaded data
+            self.bandit.b = list(data["b"])  # Set b for each arm from the loaded data
+            print(f"Loaded model: {self.model_path}")
         except Exception:
             print("Corrupted model file.")
 
     def evaluate(self, board, depth=8):
-        """ Method to evaluate a chess position using the chess engine.
-        It analyzes the given board position to obtain a score, which is then 
+        """Method to evaluate a chess position using the chess engine.
+        It analyzes the given board position to obtain a score, which is then
         converted into a WDL (Win/Draw/Loss) probability for the current player.
 
         :param board: Chess board position to evaluate.
@@ -119,33 +147,32 @@ class ChessMAB:
         :return: WDL score representing the probability of winning for the current player (1.0 = winning position, 0.0 = losing position, 0.5 = balanced position)
         :rtype: float
         """
-        info = self.engine.analyse(
-            board,
-            chess.engine.Limit(depth=depth)
-        )
+        info = self.engine.analyse(board, chess.engine.Limit(depth=depth))
         # Get the score from analysis. (positive = white advantage, negative = black advantage)
         score = info["score"].white()
-        
+
         # Inverse the score if it's black
         if board.turn == chess.BLACK:
             score = -score
-            
+
         if score.is_mate():
             mate_moves = score.mate()
             if board.turn == chess.BLACK:
                 mate_moves = mate_moves
             eval_cp = 10000 if mate_moves > 0 else -10000
         else:
-            eval_cp = score.score() # If it's not a mate score, we take the centipawn evaluation directly (positive if white is better, negative if black is better)
-        wdl = 1.0 / (1.0 + 10.0 ** (-eval_cp / 400.0)) # Convert centipawn score to WDL (Win/Draw/Loss) probability using a logistic function.
-            #   - wdl = 1.0: player has a winning position
-            #   - wdl = 0.0: player has a losing position
-            #   - wdl = 0.5: Balanced position 
-            # TODO : Explain each part of 1.0 / (1.0 + 10.0 ** (-eval_cp / 400.0))
+            eval_cp = score.score()  # If it's not a mate score, we take the centipawn evaluation directly (positive if white is better, negative if black is better)
+        wdl = (
+            1.0 / (1.0 + 10.0 ** (-eval_cp / 400.0))
+        )  # Convert centipawn score to WDL (Win/Draw/Loss) probability using a logistic function.
+        #   - wdl = 1.0: player has a winning position
+        #   - wdl = 0.0: player has a losing position
+        #   - wdl = 0.5: Balanced position
+        # TODO : Explain each part of 1.0 / (1.0 + 10.0 ** (-eval_cp / 400.0))
         return wdl
 
     def extract_features(self, board, clock):
-        """ Method to extract features from the chess board and clock for the context representation used by the bandit algorithm.
+        """Method to extract features from the chess board and clock for the context representation used by the bandit algorithm.
         The method computes several features that capture important aspects of the current game state, including:
             - Number of legal moves available for the current position
             - Remaining time as a ratio of the initial time
@@ -163,23 +190,34 @@ class ChessMAB:
         :rtype: _type_
         """
         legal_moves = len(list(board.legal_moves))
-        captures = len([m for m in board.legal_moves if board.is_capture(m)]) # Number of legal moves that are captures (eats an opponent piece)
+        captures = len(
+            [m for m in board.legal_moves if board.is_capture(m)]
+        )  # Number of legal moves that are captures (eats an opponent piece)
         # Our context
-        features = np.array([
-            legal_moves / 50.0,                  # Current position, normalized by a constant (e.g., 50) to keep it in a reasonable range for the model
-            clock.ratio(),                       # Remaining time as a ratio of the initial time (between 0 and 1)
-            board.fullmove_number / 100.0,       # Move number in game, normalized by 100 to keep every parameter in same range
-            material_balance(board) / 39.0,      # Difference in piece values between the two players, normalized by the maximum possible imbalance : 39, to keep it between -1 and 1
-            int(is_endgame(board)),              # 1 if is endgame, 0 else
-            int(board.is_check()),               # 1 if the current player is in check, 0 else                  
-            captures / 10.0                      # Normalized number of captures
-        ])      
-        return features.reshape(-1, 1) # Reshape into a column vector: Array -> Column vector (n_features x 1)
+        features = np.array(
+            [
+                legal_moves
+                / 50.0,  # Current position, normalized by a constant (e.g., 50) to keep it in a reasonable range for the model
+                clock.ratio(),  # Remaining time as a ratio of the initial time (between 0 and 1)
+                board.fullmove_number
+                / 100.0,  # Move number in game, normalized by 100 to keep every parameter in same range
+                material_balance(board)
+                / 39.0,  # Difference in piece values between the two players, normalized by the maximum possible imbalance : 39, to keep it between -1 and 1
+                int(is_endgame(board)),  # 1 if is endgame, 0 else
+                int(board.is_check()),  # 1 if the current player is in check, 0 else
+                captures / 10.0,  # Normalized number of captures
+            ]
+        )
+        return features.reshape(
+            -1, 1
+        )  # Reshape into a column vector: Array -> Column vector (n_features x 1)
 
-    def compute_reward(self, board: chess.Board, move: chess.Move, elapsed: float) -> float:
-        """ Method to compute the reward for a move based on the change in position evaluation before and after the move,
-        and the time taken to play the move. The reward is calculated by evaluating the position before 
-        and after playing the move, computing the change in WDL score (which reflects the improvement or deterioration of the position), 
+    def compute_reward(
+        self, board: chess.Board, move: chess.Move, elapsed: float
+    ) -> float:
+        """Method to compute the reward for a move based on the change in position evaluation before and after the move,
+        and the time taken to play the move. The reward is calculated by evaluating the position before
+        and after playing the move, computing the change in WDL score (which reflects the improvement or deterioration of the position),
         and then normalizing this change to give more weight to significant improvements.
         Additionally, the method penalizes long move times to encourage the agent to play efficiently.
 
@@ -192,20 +230,29 @@ class ChessMAB:
         :return: Computed reward for the move, which reflects the improvement in position quality and penalizes long move times.
         :rtype: float
         """
-        score_before = self.evaluate(board, depth=8) # Evaluate the position before playing the move (Perspective: Joueur A)
+        score_before = self.evaluate(
+            board, depth=8
+        )  # Evaluate the position before playing the move (Perspective: Joueur A)
         board.push(move)
-        score_after = self.evaluate(board, depth=8) # Evaluate the position after playing the move (Perspective: Joueur B)
-        board.pop() # Undo the move to restore the original position (for other move evaluations)                        
-        delta_wdl = (1.0 - score_after) - score_before # On ajuste car score_after est du point de vue de B. 1 - score_after redonne la probabilité pour A.
-        quality = delta_wdl * 10.0 # Normalize the reward by a factor 10 to give more weight to the move
-        reward = (                              
-            2.0 * quality 
-            - 0.05 * elapsed # Penalize long move time
+        score_after = self.evaluate(
+            board, depth=8
+        )  # Evaluate the position after playing the move (Perspective: Joueur B)
+        board.pop()  # Undo the move to restore the original position (for other move evaluations)
+        delta_wdl = (
+            (1.0 - score_after) - score_before
+        )  # On ajuste car score_after est du point de vue de B. 1 - score_after redonne la probabilité pour A.
+        quality = (
+            delta_wdl * 10.0
+        )  # Normalize the reward by a factor 10 to give more weight to the move
+        reward = (
+            2.0 * quality - 0.05 * elapsed  # Penalize long move time
         )
         return reward
 
-    def play(self, board, clock, training=True) -> tuple[chess.Move, int, float, float, float]:
-        """ Method to select and play a move based on the current board position and clock state.
+    def play(
+        self, board, clock, training=True
+    ) -> tuple[chess.Move, int, float, float, float]:
+        """Method to select and play a move based on the current board position and clock state.
 
         :param board: Current chess board state.
         :type board: chess.Board
@@ -217,40 +264,34 @@ class ChessMAB:
         :rtype: tuple[chess.Move, int, float, float, float]
         """
 
-        x = self.extract_features(
-            board,
-            clock
-        )
+        x = self.extract_features(board, clock)
         arm = self.bandit.select_arm(x)
         legal_moves = len(list(board.legal_moves))
         budget = self.time_manager.compute_time_budget(
-            arm=arm,    
+            arm=arm,
             remaining_time=clock.time_left,
             legal_moves=legal_moves,
-            endgame=is_endgame(board)
+            endgame=is_endgame(board),
         )
-        start = time.time() # Start time to measure elapsed time for playing the move
+        start = time.time()  # Start time to measure elapsed time for playing the move
         # Play the move using the chess engine WITHIN the computed time budget
-        result = self.engine.play(
-            board,                                              
-            chess.engine.Limit(time=budget)
-        )
+        result = self.engine.play(board, chess.engine.Limit(time=budget))
         elapsed = time.time() - start
-        move = result.move                           
+        move = result.move
         reward = 0.0
         if training:
-            reward = self.compute_reward(
-                board,
-                move,
-                elapsed
-            )
-            if clock.time_left - elapsed <= 0.0:                
-                reward -= 10.0 # Penalize heavily if we run out of time after playing the move
-            # Bandit model update with the observed reward for the selected arm and context               
-            self.bandit.update(
-                arm,
-                x,
-                reward
-            )
-        clock.spend(elapsed) # Update the clock by spending the elapsed time for playing the move                        
-        return (move, arm, reward, elapsed, budget) # Return informations for analysis (webUI, logs)
+            reward = self.compute_reward(board, move, elapsed)
+            if clock.time_left - elapsed <= 0.0:
+                reward -= 10.0  # Penalize heavily if we run out of time after playing the move
+            # Bandit model update with the observed reward for the selected arm and context
+            self.bandit.update(arm, x, reward)
+        clock.spend(
+            elapsed
+        )  # Update the clock by spending the elapsed time for playing the move
+        return (
+            move,
+            arm,
+            reward,
+            elapsed,
+            budget,
+        )  # Return informations for analysis (webUI, logs)
