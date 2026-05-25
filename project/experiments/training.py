@@ -1,12 +1,19 @@
-import chess
-import chess.engine
+import argparse
 import json
 import os
 import random
-import sys
-import argparse
-from pathlib import Path
 import shutil
+import sys
+from pathlib import Path
+
+# Ensure local project imports work when executing from repository root.
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+import chess
+import chess.engine
+
 from mab_agent import ChessMAB, sanitize_bandit_config
 from utils.time_manager import Clock
 from utils.opening_book import (
@@ -16,13 +23,10 @@ from utils.opening_book import (
 )
 
 # Adjust if necessary to point to your personnal .venv bin directory
-BASE_DIR = Path(__file__).resolve().parent.parent              # Base directory of the project
 ENGINE_PATH = shutil.which("stockfish") or str(BASE_DIR / "bin" / "stockfish")       # Path to Stockfish bin 
 TIME_CONTROL = 60                                       # Seconds per player for sthe training games
 
 # Directories needed for logs and models to run training and benchmarking
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
 os.makedirs(BASE_DIR / "logs", exist_ok=True)
 os.makedirs(BASE_DIR / "models", exist_ok=True)
 

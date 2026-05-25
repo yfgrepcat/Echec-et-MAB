@@ -1,18 +1,21 @@
+import argparse
+import shutil
+import sys
+from pathlib import Path
+
+# Make sure python path is set to project root before local imports.
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
 import chess
 import chess.engine
-import argparse
 import pandas as pd
-import sys
-import shutil
-from pathlib import Path
+
 from mab_agent import ChessMAB
 from utils.time_manager import Clock
 from utils.opening_book import load_openings, apply_random_opening
 
-# Make sure python path is set to project root
-BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
 ENGINE_PATH = shutil.which("stockfish") or str(BASE_DIR / "bin" / "stockfish")
 
 # Class used to run a benchmark of MAB vs Stockfish for a range of levels
