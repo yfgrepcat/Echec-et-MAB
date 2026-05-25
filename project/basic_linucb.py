@@ -1,4 +1,3 @@
-# Standard numeric dependency
 import numpy as np
 
 # LinUCB implementation (based on https://arxiv.org/pdf/1003.0146.pdf)
@@ -15,23 +14,47 @@ import numpy as np
 #               Where D is the matrix of contexts for arm a, r is the vector of rewards observed for arm a, and λ is a regularization parameter.
 class LinUCB:
 
-    # Initialization of LinUCB parameters
-    def __init__(self, n_arms, n_features, alpha=1.5):
-        self.n_arms = n_arms                # Number of arms (actions)
-        self.n_features = n_features        # Features dimension (like legal moves, time left, etc.)
-                                            # Dimension formated as a column vector (n_features x 1) for matrix operations
-        self.alpha = alpha                  # Our exploration parameter. The higher the more it will explore. >1 for more exploration, <1 for more exploitation
-        self.A_inv = [                      # A_a^-1 for each arm a, initialized to identity matrix (regularization)
-            np.identity(n_features)         #   - No observations yet, so A_a = Identity matrix (λI) and A_a^-1 = Identity matrix
-            for _ in range(n_arms)          #   - Used to compute the upper confidence bound and to update the model after observing rewards
-        ]                                   
-        self.b = [                          # b_a for each arm a, initialized to zero vector
-            np.zeros((n_features, 1))       #   - No rewards observed yet, so b_a = 0 vector
-            for _ in range(n_arms)          #   - Used to compute the estimated reward for each arm and to update the model after observing rewards
+    def __init__(self, n_arms: int, n_features: int, alpha: float = 1.5):
+        """ The LinUCB algorithm maintains an estimate of the reward function for each arm based on the contexts and rewards observed so far.
+        It uses this estimate to select arms in a way that balances exploration and exploitation.
+
+        :param n_arms: Number of arms (actions) in the bandit problem.
+        :type n_arms: int
+        :param n_features: Dimensionality of the context features used to predict rewards for each arm. 
+            Each context is represented as a vector of this size. 
+            The context features can include information about the current state of the environment, 
+            such as legal moves, time left, move number, etc. 
+            The algorithm uses these features to learn the relationship between the context and the rewards for each arm, 
+            allowing it to make informed decisions about which arm to select based on the current context.
+        :type n_features: int
+        :param alpha: Exploration parameter. The higher the more it will explore. >1 for more exploration, <1 for more exploitation, defaults to 1.5
+        :type alpha: float, optional
+        """
+        self.n_arms = n_arms
+        self.n_features = n_features
+        self.alpha = alpha
+        # A_a^-1 for each arm a, initialized to identity matrix (regularization)
+        self.A_inv = [
+            np.identity(n_features) # No observations yet, so A_a = Identity matrix (λI) and A_a^-1 = Identity matrix
+            for _ in range(n_arms)  # Used to compute the upper confidence bound and to update the model after observing rewards
+        ]
+        # b_a for each arm a, initialized to zero vector                                
+        self.b = [
+            np.zeros((n_features, 1)) # No rewards observed yet, so b_a = 0 vector
+            for _ in range(n_arms) # Used to compute the estimated reward for each arm and to update the model after observing rewards
         ]
 
     # Method to select an arm given a context x, using the upper confidence bound formula
-    def select_arm(self, x):
+    def select_arm(self, x: np.ndarray) -> int:
+        """ Method to select an arm given a context x, using the upper confidence bound formula.
+
+        :param x: Context vector (n_features x 1) for the current decision. 
+            This vector should contain the relevant features that the algorithm will use 
+            to predict rewards for each arm and make a selection.
+        :type x: np.ndarray
+        :return: The index of the selected arm (0 to n_arms-1) based on the upper confidence bound calculation.
+        :rtype: int
+        """
         p_values = []                                       # List to store the upper confidence bound for each arm
         for arm in range(self.n_arms):                      
             theta = self.A_inv[arm] @ self.b[arm]           # @ matrix multiplication to compute Theta : the estimated weight vector for arm a
@@ -52,9 +75,21 @@ class LinUCB:
         max_p = max(p_values)
         best_arms = [i for i, v in enumerate(p_values) if v == max_p]
         import random
-        return int(random.choice(best_arms))                # Return a random choice among the arms with the highest UCB value to avoid sticking to arm 0 at start
-    # Method to update the model parameters after observing a reward for an arm given a context
-    def update(self, arm, x, reward):
+        return int(random.choice(best_arms)) # Return a random choice among the arms with the highest UCB value to avoid sticking to arm 0 at start
+
+    def update(self, arm: int, x: np.ndarray, reward: float) -> None:
+        """ Method to update the model after observing a reward for a selected arm and context.
+
+        :param arm: Arm index (0 to n_arms-1) for which the reward was observed. 
+            This indicates which arm's model should be updated based on the new information.
+        :type arm: int
+        :param x: Context vector (n_features x 1) for the current decision.
+            This vector should be the same context that was used when selecting the arm, 
+            as it is used to update the model based on the observed reward.
+        :type x: np.ndarray
+        :param reward: Reward observed for the selected arm and context.
+        :type reward: float
+        """
         num = (self.A_inv[arm] @ x) @ (x.T @ self.A_inv[arm])       # num is the matrix used to update A_a^-1 after observing a reward for arm a given context x, 
                                                                     # Computed using the Sherman-Morrison formula. For the math, see https://en.wikipedia.org/wiki/Sherman%E2%80%93Morrison_formula
                                                                     # Intuition : 
@@ -62,5 +97,7 @@ class LinUCB:
                                                                     #   - To do so, we update the inverse of A_a using the Sherman-Morrison formula, which allows us to update the inverse of a matrix after a rank-1 update (which is what happens when we add x * x^T to A_a)
                                                                     #   - The formula is: A_a^-1_new = A_a^-1 - (A_a^-1 * x * x^T * A_a^-1) / (1 + x^T * A_a^-1 * x)
                                                                     # --> Updating the inverse directly is more efficient than recomputing it from scratch after updating A_a, which would require inverting a matrix (O(n^3) operation)
+        den = 1.0 + (x.T @ self.A_inv[arm] @ x).item()
+        self.A_inv[arm] -= num / den
         self.b[arm] += reward * x                                   # Update b_a by adding the observed reward weighted by the context x for arm a, which is used to update our estimate of the relationship between context features and rewards for arm a
                                                                     # We can multiply the reward by x because b_a is the cumulative reward-weighted context for arm a, so we add the new reward weighted by the context to it; x is a colum vector and reward a scalar
