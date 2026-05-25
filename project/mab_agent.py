@@ -153,7 +153,6 @@ class ChessMAB:
             arm=arm,    
             remaining_time=clock.time_left,                     # Time left from the start of the game for the current player
             legal_moves=legal_moves,
-            move_number=board.fullmove_number,                  # Move number in the game, init at 1 and incremented after each black move
             endgame=is_endgame(board)
         )
         start = time.time()                                     # Start time to measure elapsed time for playing the move      
