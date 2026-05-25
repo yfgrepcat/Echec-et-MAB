@@ -70,7 +70,7 @@ def run_training_session(
     total_games=100,
     use_openings=False,
     use_random_positions=True,
-    stockfish_level=5,
+    stockfish_level=15,
     time_control=60,
     bandit_type="basic_linucb",
     bandit_config=None,

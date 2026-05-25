@@ -202,7 +202,7 @@ class ChessMAB:
         # Time penalty capped at 0.1 -- earlier 0.5 cap was ~5x larger than the typical quality
         # difference between arms, which made the bandit prefer "always play fast" even when
         # longer thinking produced measurably better moves.
-        time_penalty = 0.1 * min(elapsed / 1.5, 1.0)
+        time_penalty = 0.015 * min(elapsed / 1.5, 1.0)
         reward = delta_wdl - time_penalty
         return reward
 
