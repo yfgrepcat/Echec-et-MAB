@@ -190,7 +190,7 @@ def auto_move():
     active_clock = game_state["white_clock"] if turn_color == chess.WHITE else game_state["black_clock"]
     
     if is_mab_turn:
-        move, arm, reward, elapsed, budget = mab.play(board, active_clock, training=False)
+        move, arm, reward, elapsed, budget, _ = mab.play(board, active_clock, training=False)
         board.push(move)
         
         info = {

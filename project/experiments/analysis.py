@@ -119,6 +119,61 @@ def analyse_results(log_file=None, log_pattern="logs/games_worker_*.jsonl"):
     plt.grid()
     plt.show()
 
+    # Diagnostic plots for learning signal
+    # The 100-move rolling mean above crosses game boundaries; the plots below avoid that
+    # and surface the per-arm signal we actually need to verify the bandit is learning.
+
+    if "game" in df.columns:
+        # Mean reward per game: one point per game, immune to cross-game window artifacts.
+        # Look for an upward trend over time -> the agent is actually learning to do better.
+        plt.figure(figsize=(12, 5))
+        df.groupby("game")["reward"].mean().plot(marker="o")
+        plt.title("Mean Reward per Game")
+        plt.xlabel("Game index")
+        plt.ylabel("Mean reward")
+        plt.grid()
+        plt.show()
+
+        # Stacked area of arm-usage proportion by game. Convergence on a particular arm
+        # over time indicates the bandit is exploiting a learned preference.
+        arm_share = (
+            df.groupby(["game", "arm"]).size()
+              .unstack(fill_value=0)
+        )
+        arm_share = arm_share.div(arm_share.sum(axis=1), axis=0)
+        plt.figure(figsize=(12, 5))
+        arm_share.plot.area(ax=plt.gca(), stacked=True)
+        plt.title("Arm Usage Share per Game")
+        plt.xlabel("Game index")
+        plt.ylabel("Share")
+        plt.ylim(0, 1)
+        plt.grid()
+        plt.show()
+
+    # Per-arm rolling reward (overlaid): if curves overlap entirely, the reward does not
+    # discriminate between arms and the bandit cannot learn from it (visual proof of the
+    # arm-discrimination problem).
+    plt.figure(figsize=(12, 5))
+    for arm_id, group in df.groupby("arm"):
+        group["reward"].rolling(50).mean().reset_index(drop=True).plot(label=f"arm {arm_id}")
+    plt.title("Per-Arm Rolling Reward (window=50)")
+    plt.xlabel("Move index within arm")
+    plt.ylabel("Rolling mean reward")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # Reward distribution per arm. Overlapping boxes mean arms produce indistinguishable
+    # reward distributions; well-separated boxes mean the bandit has a clear signal.
+    plt.figure(figsize=(8, 5))
+    df.boxplot(column="reward", by="arm")
+    plt.title("Reward Distribution per Arm")
+    plt.suptitle("")
+    plt.xlabel("Arm")
+    plt.ylabel("Reward")
+    plt.grid()
+    plt.show()
+
 # Main method to parse arguments and start analysis
 if __name__ == "__main__":
 

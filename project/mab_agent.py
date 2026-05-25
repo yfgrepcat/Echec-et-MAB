@@ -178,8 +178,8 @@ class ChessMAB:
 
     def compute_reward(self, board: chess.Board, move: chess.Move, elapsed: float) -> float:
         """ Method to compute the reward for a move based on the change in position evaluation before and after the move,
-        and the time taken to play the move. The reward is calculated by evaluating the position before 
-        and after playing the move, computing the change in WDL score (which reflects the improvement or deterioration of the position), 
+        and the time taken to play the move. The reward is calculated by evaluating the position before
+        and after playing the move, computing the change in WDL score (which reflects the improvement or deterioration of the position),
         and then normalizing this change to give more weight to significant improvements.
         Additionally, the method penalizes long move times to encourage the agent to play efficiently.
 
@@ -195,17 +195,46 @@ class ChessMAB:
         score_before = self.evaluate(board, depth=8) # Evaluate the position before playing the move (Perspective: Joueur A)
         board.push(move)
         score_after = self.evaluate(board, depth=8) # Evaluate the position after playing the move (Perspective: Joueur B)
-        board.pop() # Undo the move to restore the original position (for other move evaluations)                        
+        board.pop() # Undo the move to restore the original position (for other move evaluations)
         delta_wdl = (1.0 - score_after) - score_before # On ajuste car score_after est du point de vue de B. 1 - score_after redonne la probabilité pour A.
         quality = delta_wdl * 10.0 # Normalize the reward by a factor 10 to give more weight to the move
-        reward = (                              
-            2.0 * quality 
-            - 0.05 * elapsed # Penalize long move time
+        # Capped per-move time penalty referenced to 1.5s so it's meaningful per move
+        # (the previous game-time-normalized penalty was an order of magnitude too small to differentiate arms).
+        time_penalty = 0.5 * min(elapsed / 1.5, 1.0)
+        reward = (
+            2.0 * quality
+            - time_penalty
         )
         return reward
 
-    def play(self, board, clock, training=True) -> tuple[chess.Move, int, float, float, float]:
+    def compute_terminal_reward(self, board: chess.Board, clock_flagged: bool = False) -> float:
+        """ Terminal reward from White's perspective, called once per game when the game has ended.
+        clock_flagged=True overrides the result and applies the loss-on-time penalty,
+        since python-chess does not know about our custom Clock.
+
+        :param board: Final chess board state at game end.
+        :type board: chess.Board
+        :param clock_flagged: True if the MAB clock ran out, defaults to False
+        :type clock_flagged: bool, optional
+        :return: +2.0 White win, -2.0 White loss (or flag), 0.0 draw / not yet over.
+        :rtype: float
+        """
+        if clock_flagged:
+            return -2.0
+        if not board.is_game_over(claim_draw=True):
+            return 0.0
+        result = board.result(claim_draw=True)
+        if result == "1-0":
+            return 2.0
+        if result == "0-1":
+            return -2.0
+        return 0.0
+
+    def play(self, board, clock, training=True) -> tuple[chess.Move, int, float, float, float, np.ndarray]:
         """ Method to select and play a move based on the current board position and clock state.
+        In training mode, the bandit update is deferred to the caller (training loop) so the
+        terminal reward can be credited to the last White ply regardless of whether the game
+        ends on White's or Black's move (otherwise losses-by-Black-mate go uncredited).
 
         :param board: Current chess board state.
         :type board: chess.Board
@@ -213,8 +242,9 @@ class ChessMAB:
         :type clock: Clock
         :param training: Flag indicating whether the agent is in training mode, defaults to True
         :type training: bool, optional
-        :return: A tuple containing the selected move, the arm index, the computed reward, the elapsed time, and the time budget.
-        :rtype: tuple[chess.Move, int, float, float, float]
+        :return: A tuple (move, arm, per-move reward, elapsed, budget, context vector x).
+            In training mode, the caller is responsible for adding terminal/flag rewards and calling bandit.update.
+        :rtype: tuple[chess.Move, int, float, float, float, np.ndarray]
         """
 
         x = self.extract_features(
@@ -224,7 +254,7 @@ class ChessMAB:
         arm = self.bandit.select_arm(x)
         legal_moves = len(list(board.legal_moves))
         budget = self.time_manager.compute_time_budget(
-            arm=arm,    
+            arm=arm,
             remaining_time=clock.time_left,
             legal_moves=legal_moves,
             endgame=is_endgame(board)
@@ -232,11 +262,11 @@ class ChessMAB:
         start = time.time() # Start time to measure elapsed time for playing the move
         # Play the move using the chess engine WITHIN the computed time budget
         result = self.engine.play(
-            board,                                              
+            board,
             chess.engine.Limit(time=budget)
         )
         elapsed = time.time() - start
-        move = result.move                           
+        move = result.move
         reward = 0.0
         if training:
             reward = self.compute_reward(
@@ -244,13 +274,5 @@ class ChessMAB:
                 move,
                 elapsed
             )
-            if clock.time_left - elapsed <= 0.0:                
-                reward -= 10.0 # Penalize heavily if we run out of time after playing the move
-            # Bandit model update with the observed reward for the selected arm and context               
-            self.bandit.update(
-                arm,
-                x,
-                reward
-            )
-        clock.spend(elapsed) # Update the clock by spending the elapsed time for playing the move                        
-        return (move, arm, reward, elapsed, budget) # Return informations for analysis (webUI, logs)
+        clock.spend(elapsed) # Update the clock by spending the elapsed time for playing the move
+        return (move, arm, reward, elapsed, budget, x) # x is returned so the training loop can flush a deferred update with terminal reward

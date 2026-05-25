@@ -66,7 +66,7 @@ def run_training_session(
     total_games=100,
     use_openings=False,
     use_random_positions=True,
-    stockfish_level=15,
+    stockfish_level=5,
     time_control=60,
     bandit_type="basic_linucb",
     bandit_config=None,
@@ -131,16 +131,41 @@ def run_training_session(
                   f"Game {game_id + 1}/{total_games}")
 
             # Let's play !
-            # Main gmae loop
+            # Main game loop.
+            # Bandit updates are deferred to the loop so terminal reward (and loss-on-flag penalty) can
+            # be folded into the LAST White ply's update -- including games that ended on Black's move
+            # (e.g. Black mates White). `pending` holds (arm, x, reward, log_record) for the most
+            # recent White ply not yet flushed to the bandit.
+            pending = None
+
+            def _flush(flagged=False):
+                # Flush the pending White ply: optionally add terminal/flag reward, write its
+                # log line (so the recorded reward matches what the bandit saw), and update the bandit.
+                nonlocal pending
+                if pending is None:
+                    return
+                arm_p, x_p, reward_p, log_p = pending
+                if flagged or board.is_game_over(claim_draw=True):
+                    reward_p += mab.compute_terminal_reward(board, clock_flagged=flagged)
+                log_p["reward"] = reward_p
+                mab.bandit.update(arm_p, x_p, reward_p)
+                with open(log_file, "a") as f:
+                    json.dump(log_p, f)
+                    f.write("\n")
+                    f.flush()
+                pending = None
+
             while not board.is_game_over():
                 if board.turn == chess.WHITE:                               # If White, it's turn of the mab agent
+                    # Flush prior White ply (its reward is final now that Black has responded).
+                    _flush()
 
-                    move, arm, reward, elapsed, budget = mab.play(          # Play method of ChessMAB, see mab_agent.py for details
+                    move, arm, reward, elapsed, budget, x = mab.play(       # Play method of ChessMAB, see mab_agent.py for details
                         board,
                         mab_clock
                     )
 
-                    log = {                                                 # Log the result of the move is the json file 
+                    log = {                                                 # Log entry; reward may be overwritten in _flush if a terminal bonus is added.
                         "worker": worker_tag,
                         "game": game_id,
                         "ply": board.ply(),
@@ -156,33 +181,38 @@ def run_training_session(
                         "stockfish_level": stockfish_level
                     }
 
-                    with open(log_file, "a") as f:                          # Append the log to the jsonl file
-                        json.dump(log, f)
-                        f.write("\n")
-                        f.flush()
+                    pending = (arm, x, reward, log)
 
                 else:                                                       # It's Stockfish turn
 
-                    result = engine.play(                                   # Stockfish, please play 
+                    result = engine.play(                                   # Stockfish, please play
                         board,
                         chess.engine.Limit(depth=10)
                     )
 
-                    move = result.move                                      # Get the move played by Stockfish  
+                    move = result.move                                      # Get the move played by Stockfish
 
                 board.push(move)                                            # Play the move, either from White or Black
 
                 # Check if the clock has flagged for either player, if so, end the game
-                if mab_clock.flag(): 
+                if mab_clock.flag():
                     print(
                         f"[Worker {worker_tag}] "
                         f"Flagged on time."
                     )
+                    _flush(flagged=True)
                     break
+
+                # If the game just ended (either side's move), flush so terminal reward lands on last White ply.
+                if board.is_game_over(claim_draw=True):
+                    _flush()
 
                 # Update the progress of training
                 if progress_callback:
                     progress_callback(game_id + 1, total_games, None)
+
+            # Safety: flush any pending update if the loop exited without doing so.
+            _flush()
 
             # Save the current model after each game so training is persisted continuously.
             try:
@@ -205,7 +235,7 @@ if __name__ == "__main__":
     parser.add_argument("--total-games", type=int, default=100)
     parser.add_argument("--use-openings", action="store_true")
     parser.add_argument("--no-random-positions", action="store_true", help="Start from the initial board instead of a random middlegame.")
-    parser.add_argument("--stockfish-level", type=int, default=10)
+    parser.add_argument("--stockfish-level", type=int, default=5)
     parser.add_argument("--time-control", type=int, default=60)
     parser.add_argument("--bandit-type", default="basic_linucb", choices=["basic_linucb", "neural_linucb"])
     parser.add_argument("--device", default="cpu")
