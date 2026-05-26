@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import time
@@ -47,12 +48,6 @@ training_state = {
 def update_training_progress(current, total, result):
     training_state["current_game"] = current
     training_state["total_games"] = total
-    if result == "1-0":
-        training_state["wins"] += 1
-    elif result == "0-1":
-        training_state["losses"] += 1
-    else:
-        training_state["draws"] += 1
 
 import shutil
 ENGINE_PATH = shutil.which("stockfish") or str(ROOT_DIR / "bin" / "stockfish")
@@ -81,6 +76,34 @@ def create_game_engine(skill_level: int):
 def index():
     return render_template("index.html")
 
+@app.route("/api/workers", methods=["GET"])
+def list_workers():
+    """Return the list of trained workers available for a given bandit type."""
+    bandit_type = request.args.get("bandit_type", "basic_linucb")
+    models_dir = os.path.join(ROOT_DIR, "models")
+    workers = []
+
+    if not os.path.isdir(models_dir):
+        return jsonify({"workers": []})
+
+    for fname in sorted(os.listdir(models_dir)):
+        if not fname.endswith(".npz"):
+            continue
+        if bandit_type == "neural_linucb":
+            # Match worker_*_neural.npz
+            m = re.match(r"^worker_(.+)_neural\.npz$", fname)
+            if m:
+                workers.append({"id": m.group(1) + "_neural", "filename": fname})
+        else:
+            # Match worker_*.npz but NOT worker_*_neural.npz
+            if "_neural.npz" in fname:
+                continue
+            m = re.match(r"^worker_(.+)\.npz$", fname)
+            if m:
+                workers.append({"id": m.group(1), "filename": fname})
+
+    return jsonify({"workers": workers})
+
 @app.route("/api/start", methods=["POST"])
 def start_game():
     data = request.json or {}
@@ -89,6 +112,7 @@ def start_game():
     time_control = data.get("time_control", 300)
     bandit_type = data.get("bandit_type", "basic_linucb")
     bandit_config = data.get("bandit_config", None)
+    worker_id = data.get("worker_id", None)
     
     game_state["mode"] = mode
     game_state["sf_level"] = sf_level
@@ -114,7 +138,12 @@ def start_game():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    model_path = os.path.join(ROOT_DIR, "models", "final_model.npz")
+    # Build model path from worker_id if provided
+    if worker_id:
+        model_path = os.path.join(ROOT_DIR, "models", f"worker_{worker_id}.npz")
+    else:
+        model_path = os.path.join(ROOT_DIR, "models", "final_model.npz")
+
     game_state["mab"] = ChessMAB(
         game_state["engine"],
         model_path=model_path,
@@ -235,7 +264,15 @@ def auto_move():
     
 @app.route("/api/analysis", methods=["GET"])
 def get_analysis():
-    log_files = glob.glob(os.path.join(ROOT_DIR, "logs", "games_worker_*.jsonl"))
+    worker_id = request.args.get("worker_id", None)
+
+    if worker_id:
+        # Filter logs for a specific worker
+        log_files = [os.path.join(ROOT_DIR, "logs", f"games_worker_{worker_id}.jsonl")]
+        log_files = [f for f in log_files if os.path.exists(f)]
+    else:
+        log_files = glob.glob(os.path.join(ROOT_DIR, "logs", "games_worker_*.jsonl"))
+
     rows = []
     for log_file in log_files:
         with open(log_file, "r") as f:
@@ -293,6 +330,14 @@ def run_train():
     bandit_type = data.get("bandit_type", "basic_linucb")
     bandit_config = data.get("bandit_config", None)
     
+    worker_id = data.get("worker_id", "")
+    if not worker_id:
+        worker_id = f"new_run_{int(time.time())}"
+        
+    if bandit_type == "neural_linucb" and not worker_id.endswith("_neural"):
+        worker_id += "_neural"
+
+    
     training_state.update({
         "is_training": True, "current_game": 0, "total_games": games,
         "wins": 0, "losses": 0, "draws": 0
@@ -305,7 +350,7 @@ def run_train():
 
     def train_task():
         run_training_session(
-            worker_id=0,
+            worker_id=worker_id,
             total_games=games,
             use_openings=True,
             use_random_positions=False,
@@ -333,18 +378,26 @@ def run_benchmark():
         
     data = request.json or {}
     bandit_type = data.get("bandit_type", "basic_linucb")
-        
+    worker_id = data.get("worker_id", None)
+
+    # Build model path from worker_id
+    if worker_id:
+        model_path = os.path.join(ROOT_DIR, "models", f"worker_{worker_id}.npz")
+    else:
+        model_path = os.path.join(ROOT_DIR, "models", "final_model.npz")
+
     benchmark_is_running = True
     def bench_task():
         global benchmark_is_running
-        subprocess.run([
+        cmd = [
             sys.executable,
-            os.path.join(ROOT_DIR, "experiments", "benchmark_simulate.py"),
-            "--simulate",
-            "--runs", "1",
-            "--games-per-run", "2",
-            "--bandits", bandit_type
-        ])
+            os.path.join(ROOT_DIR, "experiments", "benchmark.py"),
+            "--model-path", model_path,
+            "--bandit-type", bandit_type,
+            "--games-per-level", "2",
+            "--levels", "1", "5", "10",
+        ]
+        subprocess.run(cmd)
         benchmark_is_running = False
     threading.Thread(target=bench_task).start()
     return jsonify({"status": "started"})
@@ -352,8 +405,10 @@ def run_benchmark():
 @app.route("/api/benchmarks", methods=["GET"])
 def get_benchmarks():
     global benchmark_is_running
+    bandit_type = request.args.get("bandit_type", "basic_linucb")
+    csv_path = os.path.join(ROOT_DIR, "logs", f"benchmark_results_{bandit_type}.csv")
     try:
-        df = pd.read_csv(os.path.join(ROOT_DIR, "logs", "benchmark_results.csv"))
+        df = pd.read_csv(csv_path)
         return jsonify({
             "results": df.to_dict(orient="records"),
             "is_running": benchmark_is_running

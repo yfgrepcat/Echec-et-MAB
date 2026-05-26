@@ -82,6 +82,95 @@ $('#gameMode').change(function() {
     }
 });
 
+// Worker Selection Logic
+
+/**
+ * Fetch available workers for a given bandit type and populate a <select>.
+ * @param {string} banditType  - "basic_linucb" or "neural_linucb"
+ * @param {string} selectId    - jQuery selector for the <select> element
+ * @param {string} defaultLabel - Label for the default/empty option
+ */
+function loadWorkers(banditType, selectId, defaultLabel, selectedValue = null) {
+    const $select = $(selectId);
+    $select.empty();
+
+    if (defaultLabel) {
+        $select.append(`<option value="">${defaultLabel}</option>`);
+    }
+
+    $.get('/api/workers', { bandit_type: banditType }, (res) => {
+        if (!res.workers || res.workers.length === 0) {
+            $select.append('<option value="" disabled>Aucun worker disponible</option>');
+            return;
+        }
+        res.workers.forEach((w) => {
+            $select.append(`<option value="${w.id}">${w.filename}</option>`);
+        });
+        if (selectedValue) {
+            $select.val(selectedValue);
+            // Hide the text input if we successfully selected an existing/new worker
+            if (selectId === '#trainWorkerSelect' && $select.val() !== "") {
+                $('#trainNewWorkerName').hide();
+            }
+        } else if (!defaultLabel && res.workers.length > 0) {
+            $select.val(res.workers[0].id);
+        }
+    });
+}
+
+// Initialize worker lists on page load
+$(document).ready(function() {
+    loadWorkers('basic_linucb', '#workerSelect', null);
+    loadWorkers('basic_linucb', '#analysisWorkerSelect', 'Tous les workers');
+    loadWorkers('basic_linucb', '#benchWorkerSelect', null);
+    loadWorkers('basic_linucb', '#trainWorkerSelect', 'Nouveau worker...');
+});
+
+// When Play bandit type changes → reload play worker list
+$('#banditType').change(function() {
+    loadWorkers($(this).val(), '#workerSelect', null);
+});
+
+// When Analysis bandit type changes → reload analysis worker list and refresh data
+$('#analysisBanditType').change(function() {
+    loadWorkers($(this).val(), '#analysisWorkerSelect', 'Tous les workers');
+    // Auto-refresh analysis after a short delay to let the select populate
+    setTimeout(loadAnalysis, 300);
+});
+
+// When Analysis worker select changes → refresh data
+$('#analysisWorkerSelect').change(function() {
+    loadAnalysis();
+});
+
+// When Benchmark bandit type changes → reload bench worker list and refresh
+$('#benchBanditType').change(function() {
+    loadWorkers($(this).val(), '#benchWorkerSelect', null);
+    setTimeout(loadBenchmarks, 300);
+});
+
+// When Benchmark worker select changes → refresh
+$('#benchWorkerSelect').change(function() {
+    loadBenchmarks();
+});
+
+// When Training bandit type changes → reload train worker list
+$('#trainBanditType').change(function() {
+    loadWorkers($(this).val(), '#trainWorkerSelect', 'Nouveau worker...');
+    $('#trainNewWorkerName').show();
+});
+
+// When Training worker select changes → show/hide new worker name input
+$('#trainWorkerSelect').change(function() {
+    if ($(this).val() === "") {
+        $('#trainNewWorkerName').show();
+    } else {
+        $('#trainNewWorkerName').hide();
+    }
+});
+
+// Chess Board
+
 function onDragStart (source, piece, position, orientation) {
   if (!isPlaying || isAgentThinking || game.game_over()) return false;
   if (currentMode !== "human_vs_mab") return false; 
@@ -106,15 +195,24 @@ const config = {
 
 board = Chessboard('board', config);
 
+// Game Start
+
 $('#startBtn').click(() => {
     currentMode = $('#gameMode').val();
     const sfLevel = $('#sfLevel').val();
     const timeControl = parseInt($('#timeControl').val());
     const banditType = $('#banditType').val();
+    const workerId = $('#workerSelect').val();
     
     $.ajax({
         url: '/api/start', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ mode: currentMode, sf_level: sfLevel, time_control: timeControl, bandit_type: banditType }),
+        data: JSON.stringify({
+            mode: currentMode,
+            sf_level: sfLevel,
+            time_control: timeControl,
+            bandit_type: banditType,
+            worker_id: workerId || null
+        }),
         success: (res) => {
             game.load(res.fen);
             board.position(res.fen);
@@ -139,6 +237,8 @@ $('#startBtn').click(() => {
         }
     });
 });
+
+// Moves
 
 function sendHumanMove(uci) {
     if (currentMode !== "human_vs_mab") return;
@@ -214,6 +314,8 @@ function addHistoryItem(player, move, time="", arm="") {
     $history.prepend(`<div class="history-item"><span><strong>${player}</strong>: ${move}</span>${timeStr}</div>`);
 }
 
+// Tabs
+
 $('.tab-btn').click(function() {
     $('.tab-btn').removeClass('active'); $(this).addClass('active');
     $('.tab-content').hide(); $('#' + $(this).data('tab') + '-tab').fadeIn();
@@ -224,19 +326,17 @@ $('.tab-btn').click(function() {
 $('#refreshAnalysis').click(loadAnalysis);
 $('#refreshBench').click(loadBenchmarks);
 
+// Training
+
 let trainPollInterval = null;
 
 function pollTrainStatus() {
     $.get('/api/train_status', (res) => {
         if (res.is_training) {
             $('#trainProgressContainer').show();
-            $('#trainGameCount').text(res.current_game + '/' + res.total_games);
-            $('#trainWins').text(res.wins);
-            $('#trainLosses').text(res.losses);
-            $('#trainDraws').text(res.draws);
-            const percent = (res.current_game / Math.max(1, res.total_games)) * 100;
-            $('#trainProgressBar').css('width', percent + '%');
-            $('#trainStatus').text('Entraînement en cours...');
+            $('#trainStatusIndicator').show();
+            $('#trainStatus').text('Modèle en cours de mise à jour...');
+            loadTrainingChart();
         } else {
             if (trainPollInterval) {
                 clearInterval(trainPollInterval);
@@ -249,37 +349,75 @@ function pollTrainStatus() {
     });
 }
 
+let currentTrainingWorkerId = null;
+
 $('#startTrainBtn').click(() => {
     const games = $('#trainGames').val();
     const sf = $('#trainLevel').val();
     const tc = parseInt($('#trainTime').val());
     const banditType = $('#trainBanditType').val();
+    
+    let workerId = $('#trainWorkerSelect').val();
+    if (!workerId) {
+        workerId = $('#trainNewWorkerName').val().trim();
+        if (!workerId) {
+            workerId = "new_run_" + Math.floor(Date.now() / 1000);
+        }
+    }
+    
+    if (banditType === "neural_linucb" && !workerId.endsWith("_neural")) {
+        workerId += "_neural";
+    }
+    currentTrainingWorkerId = workerId;
+
     $('#trainStatus').text('Entraînement lancé en arrière-plan...');
     $('#trainProgressContainer').show();
     $.ajax({
         url: '/api/train', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({games, sf_level: sf, time_control: tc, bandit_type: banditType}),
+        data: JSON.stringify({games, sf_level: sf, time_control: tc, bandit_type: banditType, worker_id: currentTrainingWorkerId}),
         success: () => {
             if (trainPollInterval) clearInterval(trainPollInterval);
             trainPollInterval = setInterval(pollTrainStatus, 1000);
+            
+            // Reload the worker lists in other tabs so the new worker appears
+            setTimeout(() => {
+                loadWorkers($('#trainBanditType').val(), '#trainWorkerSelect', 'Nouveau worker...', currentTrainingWorkerId);
+                loadWorkers($('#banditType').val(), '#workerSelect', null);
+                loadWorkers($('#analysisBanditType').val(), '#analysisWorkerSelect', 'Tous les workers');
+                loadWorkers($('#benchBanditType').val(), '#benchWorkerSelect', null);
+            }, 3000); // Give it some time to save the initial model
         }
     });
 });
 
+// Benchmark
+
 $('#runBenchBtn').click(() => {
     const banditType = $('#benchBanditType').val();
+    const workerId = $('#benchWorkerSelect').val();
     $('#benchStatus').text('Benchmark lancé... (peut prendre du temps)');
     $.ajax({
         url: '/api/run_benchmark', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({bandit_type: banditType}),
+        data: JSON.stringify({
+            bandit_type: banditType,
+            worker_id: workerId || null
+        }),
         success: () => {
             if (!benchPollInterval) benchPollInterval = setInterval(loadBenchmarks, 3000);
         }
     });
 });
 
+// Analysis
+
 function loadAnalysis() {
-    $.get('/api/analysis', (res) => {
+    const workerId = $('#analysisWorkerSelect').val();
+    const params = {};
+    if (workerId) {
+        params.worker_id = workerId;
+    }
+
+    $.get('/api/analysis', params, (res) => {
         if (!res.stats && !res.recent_rewards) return;
         const ctxReward = document.getElementById('rewardChart').getContext('2d');
         if (rewardChart) rewardChart.destroy();
@@ -311,31 +449,6 @@ function loadAnalysis() {
                 data: {
                     labels: Object.keys(res.arm_time_stats).map(a => "Bras " + a),
                     datasets: [{ label: 'Temps Moyen (s)', data: Object.values(res.arm_time_stats), backgroundColor: ['#818cf8', '#34d399', '#fbbf24', '#f87171'] }]
-                },
-                options: { responsive: true }
-            });
-        }
-        
-        if (res.level_stats) {
-            const ctxLevel = document.getElementById('levelChart').getContext('2d');
-            if (levelChart) levelChart.destroy();
-            const datasets = [];
-            const colors = ['#38bdf8', '#fbbf24', '#f87171', '#34d399', '#818cf8'];
-            let i = 0;
-            for (const [level, data] of Object.entries(res.level_stats)) {
-                datasets.push({
-                    label: 'Niveau ' + level + ' (Moy: ' + data.avg_reward + ')',
-                    data: data.rewards,
-                    borderColor: colors[i % colors.length],
-                    tension: 0.3, fill: false
-                });
-                i++;
-            }
-            levelChart = new Chart(ctxLevel, {
-                type: 'line',
-                data: {
-                    labels: Array.from({length: datasets[0] ? datasets[0].data.length : 0}, (_, j) => j + 1),
-                    datasets: datasets
                 },
                 options: { responsive: true }
             });
@@ -373,12 +486,52 @@ function loadAnalysis() {
     });
 }
 
+function loadTrainingChart() {
+    let workerId = currentTrainingWorkerId; // Use the locked ID
+    if (!workerId) return; // Do nothing if training hasn't started or we don't know the ID
+
+    const params = { worker_id: workerId };
+
+    $.get('/api/analysis', params, (res) => {
+        if (!res.level_stats) return;
+        
+        const ctxLevel = document.getElementById('levelChart').getContext('2d');
+        if (levelChart) levelChart.destroy();
+        const datasets = [];
+        const colors = ['#38bdf8', '#fbbf24', '#f87171', '#34d399', '#818cf8'];
+        let i = 0;
+        for (const [level, data] of Object.entries(res.level_stats)) {
+            datasets.push({
+                label: 'Niveau ' + level + ' (Moy: ' + data.avg_reward + ')',
+                data: data.rewards,
+                borderColor: colors[i % colors.length],
+                tension: 0.3, fill: false
+            });
+            i++;
+        }
+        levelChart = new Chart(ctxLevel, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: datasets[0] ? datasets[0].data.length : 0}, (_, j) => j + 1),
+                datasets: datasets
+            },
+            options: { 
+                responsive: true,
+                animation: false // Disable animation so it updates smoothly during polling
+            }
+        });
+    });
+}
+
+// Benchmarks Loading
+
 let benchPollInterval = null;
 
 function loadBenchmarks() {
-    $.get('/api/benchmarks', (res) => {
+    const banditType = $('#benchBanditType').val();
+    $.get('/api/benchmarks', { bandit_type: banditType }, (res) => {
         if (res.is_running) {
-            $('#benchStatus').text('Benchmark en cours d\'exécution...');
+            $('#benchStatus').text("Benchmark en cours d'exécution...");
             if (!benchPollInterval) benchPollInterval = setInterval(loadBenchmarks, 3000);
         } else {
             $('#benchStatus').text(res.results ? 'Benchmark terminé.' : 'Aucun benchmark pour le moment.');
@@ -389,7 +542,7 @@ function loadBenchmarks() {
         }
         
         if (!res.results) {
-            $('#benchmarkTable tbody').html('<tr><td colspan="5">Aucune donnée trouvée. (Lancez python benchmark.py)</td></tr>');
+            $('#benchmarkTable tbody').html('<tr><td colspan="5">Aucune donnée trouvée. (Lancez un benchmark)</td></tr>');
             return;
         }
         
