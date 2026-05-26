@@ -14,7 +14,7 @@ import numpy as np
 #               Where D is the matrix of contexts for arm a, r is the vector of rewards observed for arm a, and λ is a regularization parameter.
 class LinUCB:
 
-    def __init__(self, n_arms: int, n_features: int, alpha: float = 0.5):
+    def __init__(self, n_arms: int, n_features: int, alpha: float = 1.5):
         """ The LinUCB algorithm maintains an estimate of the reward function for each arm based on the contexts and rewards observed so far.
         It uses this estimate to select arms in a way that balances exploration and exploitation.
 
@@ -27,7 +27,7 @@ class LinUCB:
             The algorithm uses these features to learn the relationship between the context and the rewards for each arm, 
             allowing it to make informed decisions about which arm to select based on the current context.
         :type n_features: int
-        :param alpha: Exploration parameter. The higher the more it will explore. >1 for more exploration, <1 for more exploitation, defaults to 0.5
+        :param alpha: Exploration parameter. The higher the more it will explore. >1 for more exploration, <1 for more exploitation, defaults to 1.5
         :type alpha: float, optional
         """
         self.n_arms = n_arms

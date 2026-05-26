@@ -68,7 +68,7 @@ class NeuralLinUCB:
         self,
         n_arms: int,  # Number of arms (actions)
         n_features: int,  # Input features
-        alpha: float = 0.5,  # Exploration parameter (just like in basic LinUCB)
+        alpha: float = 1.5,  # Exploration parameter (just like in basic LinUCB)
         hidden_sizes: int = 10,  # One hidden layer: 10 neurons, simple and enough for the current 7 features
         representation_dim: int = 16,  # Output size of the encoder; this is the latent context size used by LinUCB
         lr: float = 1e-3,  # Learning rate for the encoder network
