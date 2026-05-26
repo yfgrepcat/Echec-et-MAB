@@ -27,18 +27,13 @@ python project/gui/app.py
 ### Basic LinUCB
 
 ```bash
-python project/experiments/benchmark.py \
-  --bandit-type basic_linucb \
-  --model-path project/models/worker_0.pkl
+python project/experiments/training.py --bandit-type basic_linucb  --total-games 100 --worker-id runtest_yo
 ```
 
 ### Neural LinUCB 
 
 ```bash
-python project/experiments/training.py \
-  --bandit-type neural_linucb \
-  --worker-id run_neural_v1 \
-  --total-games 100
+python project/experiments/training.py --bandit-type neural_linucb  --total-games 100 --worker-id runtest_yo_neural
 ```
 
 ## Run Benchmark 
@@ -46,15 +41,25 @@ python project/experiments/training.py \
 ### Basic LinUCB
 
 ```bash
-python project/experiments/benchmark.py \
-  --bandit-type basic_linucb \
-  --model-path project/models/worker_0.pkl
+python project/experiments/benchmark.py --bandit-type basic_linucb --model-path project/models/worker_runtest_yo.npz 
 ```
 
 ### Neural LinUCB 
 
 ```bash
-python project/experiments/benchmark.py \
-  --bandit-type neural_linucb \
-  --model-path project/models/worker_0.pkl
+python project/experiments/benchmark.py --bandit-type neural_linucb --model-path project/models/worker_runtest_yo_neural.npz
+```
+
+## Run Analysis
+
+### Basic LinUCB
+
+```bash
+./.venv/bin/python project/experiments/analysis.py   --log-file project/logs/games_worker_runtest_yo.jsonl 
+```
+
+### Neural LinUCB 
+
+```bash
+./.venv/bin/python project/experiments/analysis.py   --log-file project/logs/games_worker_runtest_yo_neural.jsonl 
 ```
