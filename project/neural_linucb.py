@@ -21,6 +21,10 @@ class RewardNetwork(nn.Module):
         :type repr_dim: int, optional
         """
         super().__init__()
+        # Allow `hidden_sizes` to be provided as an int (single layer) or an iterable
+        if isinstance(hidden_sizes, int):
+            hidden_sizes = (hidden_sizes,)
+
         layers = []  # layers is a list that will contain the layers of the network, built sequentially
         in_dim = input_dim  # Number in of feature, the input dimension of first layer
         for h in (
