@@ -48,6 +48,10 @@
                         <option value="neural_linucb">Neural LinUCB</option>
                     </select>
 
+                    <select id="workerSelect" class="select-box">
+                        <option value="">Chargement...</option>
+                    </select>
+
                     <button id="startBtn" class="btn primary-btn">Nouvelle Partie</button>
                 </div>
                 <div class="status-indicator">
@@ -97,6 +101,16 @@
                 <!-- ANALYSIS TAB -->
                 <div id="analysis-tab" class="tab-content glass-panel" style="display: none;">
                     <h3>Performances (Logs)</h3>
+                    <div class="controls" style="justify-content: flex-start; margin-bottom: 1rem;">
+                        <select id="analysisBanditType" class="select-box">
+                            <option value="basic_linucb" selected>Basic LinUCB</option>
+                            <option value="neural_linucb">Neural LinUCB</option>
+                        </select>
+                        <select id="analysisWorkerSelect" class="select-box">
+                            <option value="">Tous les workers</option>
+                        </select>
+                        <button id="refreshAnalysis" class="btn secondary-btn">Rafraîchir</button>
+                    </div>
                     <div class="chart-container">
                         <canvas id="rewardChart"></canvas>
                     </div>
@@ -109,7 +123,6 @@
                     <div class="chart-container">
                         <canvas id="phaseChart"></canvas>
                     </div>
-                    <button id="refreshAnalysis" class="btn secondary-btn">Rafraîchir les données</button>
                 </div>
 
                 <!-- TRAINING TAB -->
@@ -137,23 +150,18 @@
                             <option value="basic_linucb" selected>Basic LinUCB</option>
                             <option value="neural_linucb">Neural LinUCB</option>
                         </select>
+                        <select id="trainWorkerSelect" class="select-box">
+                            <option value="">Nouveau worker...</option>
+                        </select>
+                        <input type="text" id="trainNewWorkerName" class="select-box" style="width:150px;" placeholder="Nom (optionnel)">
                         <button id="startTrainBtn" class="btn primary-btn">Lancer</button>
                     </div>
 
                     <div id="trainProgressContainer"
                         style="display: none; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #fbbf24;">
                         <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Progression de l'entraînement</h4>
-                        <div
-                            style="display: flex; justify-content: space-between; font-size: 1.1rem; margin-bottom: 0.5rem;">
-                            <span>Partie : <strong id="trainGameCount">0/0</strong></span>
-                            <span style="color: #34d399;">Gagnées : <strong id="trainWins">0</strong></span>
-                            <span style="color: #f87171;">Perdues : <strong id="trainLosses">0</strong></span>
-                            <span style="color: #94a3b8;">Nuls : <strong id="trainDraws">0</strong></span>
-                        </div>
-                        <div style="width: 100%; background: rgba(255,255,255,0.1); border-radius: 4px; height: 10px;">
-                            <div id="trainProgressBar"
-                                style="width: 0%; background: #fbbf24; height: 10px; border-radius: 4px; transition: width 0.3s;">
-                            </div>
+                        <div style="font-size: 1.1rem; margin-bottom: 0.5rem; text-align: center;">
+                            <span id="trainStatusIndicator" style="display: none;">⏳ Entraînement en cours... Ne quittez pas la page.</span>
                         </div>
                     </div>
                     <div id="trainStatus" style="color: #fbbf24; font-weight: bold; margin-bottom: 1rem;"></div>
@@ -167,13 +175,17 @@
                 <!-- BENCHMARK TAB -->
                 <div id="benchmarks-tab" class="tab-content glass-panel" style="display: none;">
                     <h3>Résultats MAB vs SF</h3>
-                    <div style="margin-bottom: 1rem;">
-                        <select id="benchBanditType" class="select-box" style="margin-right: 1rem;">
+                    <div class="controls" style="justify-content: flex-start; margin-bottom: 1rem;">
+                        <select id="benchBanditType" class="select-box">
                             <option value="basic_linucb" selected>Basic LinUCB</option>
                             <option value="neural_linucb">Neural LinUCB</option>
                         </select>
-                        <button id="runBenchBtn" class="btn primary-btn">Lancer le script Benchmark</button>
-                        <span id="benchStatus" style="margin-left: 1rem; color: #fbbf24; font-weight: bold;"></span>
+                        <select id="benchWorkerSelect" class="select-box">
+                            <option value="">Chargement...</option>
+                        </select>
+                        <button id="runBenchBtn" class="btn primary-btn">Lancer Benchmark</button>
+                        <button id="refreshBench" class="btn secondary-btn">Rafraîchir</button>
+                        <span id="benchStatus" style="margin-left: 0.5rem; color: #fbbf24; font-weight: bold;"></span>
                     </div>
                     <p style="color: var(--text-muted); font-size: 0.9rem;">Winrate de MAB face aux différents niveaux
                         de Stockfish.</p>
@@ -195,7 +207,6 @@
                             </tbody>
                         </table>
                     </div>
-                    <button id="refreshBench" class="btn secondary-btn">Rafraîchir les données</button>
                 </div>
 
             </div>
