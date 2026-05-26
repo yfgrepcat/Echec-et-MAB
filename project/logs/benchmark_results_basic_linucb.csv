@@ -1,0 +1,6 @@
+bandit_type,model_path,level,games,wins,losses,draws,winrate
+basic_linucb,project/models/worker_runtest_yo.npz,1,5,3,2,0,0.6
+basic_linucb,project/models/worker_runtest_yo.npz,5,5,3,2,0,0.6
+basic_linucb,project/models/worker_runtest_yo.npz,10,5,4,1,0,0.8
+basic_linucb,project/models/worker_runtest_yo.npz,15,5,5,0,0,1.0
+basic_linucb,project/models/worker_runtest_yo.npz,20,5,3,0,2,0.6
