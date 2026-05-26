@@ -42,12 +42,20 @@ class TimeManager:
     :rtype: TimeManager
     """
 
-    def __init__(self, arm0=0.5, arm1=1.0, arm2=2.0, arm3=4.0):
+    def __init__(self, arm0=0.02, arm1=0.1, arm2=0.5, arm3=2.0):
+        # Wide multiplier range (100×) so that the fastest arm genuinely handicaps the engine.
+        # At 60s time control / ~40 expected moves → base_time ≈ 1.5s:
+        #   arm 0: 0.02 × 1.5 ≈ 30ms  → Stockfish depth ~4-6  (noticeably weaker moves)
+        #   arm 1: 0.1  × 1.5 ≈ 150ms → Stockfish depth ~8-10 (slightly constrained)
+        #   arm 2: 0.5  × 1.5 ≈ 750ms → Stockfish depth ~12-14 (reasonable)
+        #   arm 3: 2.0  × 1.5 ≈ 3.0s  → Stockfish depth ~18+  (near-optimal)
+        # Previous values [0.5, 1.0, 2.0, 4.0] all gave enough time for near-optimal play,
+        # making arms indistinguishable (Cohen's d < 0.1 across 27k moves).
         self.ARM_MULTIPLIERS = [
-            arm0,  # Arm 0 gets the base time budget
-            arm1,  # Arm 1 gets twice the base time budget
-            arm2,  # Arm 2 gets four times the base time budget
-            arm3,  # Arm 3 gets eight times the base time budget
+            arm0,  # Arm 0: ultra-fast, genuinely constrained
+            arm1,  # Arm 1: fast, slightly constrained
+            arm2,  # Arm 2: moderate, reasonable thinking time
+            arm3,  # Arm 3: slow, deep search
         ]
 
     # Compute the time budget for a given move based on game state and arm choice

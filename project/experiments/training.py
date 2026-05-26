@@ -191,7 +191,7 @@ def run_training_session(
 
                     result = engine.play(                                   # Stockfish, please play
                         board,
-                        chess.engine.Limit(depth=10)
+                        chess.engine.Limit(depth=6)                          # Lowered from 10 to 6 so opponent is weaker and time allocation differences impact outcomes
                     )
 
                     move = result.move                                      # Get the move played by Stockfish
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     parser.add_argument("--total-games", type=int, default=100)
     parser.add_argument("--use-openings", action="store_true")
     parser.add_argument("--no-random-positions", action="store_true", help="Start from the initial board instead of a random middlegame.")
-    parser.add_argument("--stockfish-level", type=int, default=5)
+    parser.add_argument("--stockfish-level", type=int, default=3)
     parser.add_argument("--time-control", type=int, default=60)
     parser.add_argument("--bandit-type", default="basic_linucb", choices=["basic_linucb", "neural_linucb"])
     parser.add_argument("--device", default="cpu")
