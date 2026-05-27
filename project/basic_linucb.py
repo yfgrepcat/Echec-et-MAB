@@ -101,3 +101,10 @@ class LinUCB:
         self.A_inv[arm] -= num / den
         self.b[arm] += reward * x                                   # Update b_a by adding the observed reward weighted by the context x for arm a, which is used to update our estimate of the relationship between context features and rewards for arm a
                                                                     # We can multiply the reward by x because b_a is the cumulative reward-weighted context for arm a, so we add the new reward weighted by the context to it; x is a colum vector and reward a scalar
+
+    def add_retroactive_reward(self, arm: int, x: np.ndarray, reward: float) -> None:
+        """ Adds a reward to a previously observed context without double-counting 
+        its covariance. Used to distill episodic rewards (like win/loss) back into 
+        the moves that caused them.
+        """
+        self.b[arm] += reward * x

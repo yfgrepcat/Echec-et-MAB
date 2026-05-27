@@ -84,20 +84,22 @@ def run_training_session(
     # Try to start Stockfish engine. If not available and `simulate` is True,
     # fall back to a dummy engine that picks random legal moves. See DummyEngine class above
     # TODO : talk about it in the report
-    engine = None
+    agent_engine = None
+    opponent_engine = None
     try:
-        engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)                   # Try to start Stockfish engine  
-        engine.configure({"Skill Level": stockfish_level})                          # Set Stockfish level
+        agent_engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
+        agent_engine.configure({"Skill Level": 10})
+        opponent_engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
+        opponent_engine.configure({"Skill Level": stockfish_level})
     except FileNotFoundError:
         if simulate:
             print("Warning: 'stockfish' not found; using DummyEngine for simulation.")
-            engine = DummyEngine(skill_level=stockfish_level)                       # Use DummyEngine if flag is present
+            agent_engine = DummyEngine(skill_level=10)
+            opponent_engine = DummyEngine(skill_level=stockfish_level)
         else:
             raise RuntimeError(
                 "Stockfish engine not found in PATH. Install stockfish or run with --simulate to use a dummy engine."
             )
-
-    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")              # Model file path
 
     # We need to sanitize the bandit to avoid errors when loading/saving the model
     # TODO : talk about this too on the report
@@ -107,7 +109,7 @@ def run_training_session(
         raise RuntimeError(f"Invalid bandit_config: {e}") from e
 
     mab = ChessMAB(                                                                 # Instialize instance of ChessMAB with the engine, model path and bandit config
-        engine,
+        agent_engine,
         model_path=model_path,
         bandit_config=bandit_config,
         bandit_type=bandit_type,
@@ -128,40 +130,85 @@ def run_training_session(
                         openings
                     )
 
-            # Init clock for MAB. No need for Stockfish take care of its own time management
+            # Init clocks for both sides.
             mab_clock = Clock(time_control)
+            opponent_clock = Clock(time_control)
 
             print(f"[Worker {worker_tag}]" 
                   f"Game {game_id + 1}/{total_games}")
 
             # Let's play !
             # Main game loop.
-            # Bandit updates are deferred to the loop so terminal reward (and loss-on-flag penalty) can
-            # be folded into the LAST White ply's update -- including games that ended on Black's move
-            # (e.g. Black mates White). `pending` holds (arm, x, reward, log_record) for the most
-            # recent White ply not yet flushed to the bandit.
+            # We buffer the history to apply the retroactive terminal reward
+            # at the end of the game without double-counting context matrices.
+            game_history = []
             pending = None
 
             def _flush(flagged=False):
-                # Flush the pending White ply: optionally add terminal/flag reward, write its
-                # log line (so the recorded reward matches what the bandit saw), and update the bandit.
                 nonlocal pending
                 if pending is None:
                     return
                 arm_p, x_p, reward_p, log_p = pending
-                # if flagged or board.is_game_over(claim_draw=True):
-                #     reward_p += mab.compute_terminal_reward(board, clock_flagged=flagged)
-                log_p["reward"] = reward_p
+                
+                # Update mid-game! The bandit learns from the immediate per-move signal.
                 mab.bandit.update(arm_p, x_p, reward_p)
-                with open(log_file, "a") as f:
-                    json.dump(log_p, f)
-                    f.write("\n")
-                    f.flush()
+                
+                # Save to history so we can apply terminal reward later
+                game_history.append((arm_p, x_p, reward_p, log_p))
                 pending = None
+
+            def _end_game(flagged=False):
+                if not game_history:
+                    return
+
+                total_moves = len(game_history)
+                is_mab_flag = flagged and mab_clock.flag()
+                is_opp_flag = flagged and opponent_clock.flag()
+                
+                # Small, spread game-outcome term and flag penalty
+                outcome_sign = 0.0
+                if is_mab_flag:
+                    outcome_sign = -1.0
+                elif is_opp_flag:
+                    outcome_sign = 1.0
+                elif board.is_game_over(claim_draw=True):
+                    res = board.result(claim_draw=True)
+                    if res == "1-0":
+                        outcome_sign = 1.0
+                    elif res == "0-1":
+                        outcome_sign = -1.0
+                
+                spread_outcome = 0.0
+                if outcome_sign != 0.0 and total_moves > 0:
+                    mean_abs_reward = sum(abs(item[2]) for item in game_history) / total_moves
+                    # The value added to each past move is a fraction (e.g., 50%) of the 
+                    # average reward magnitude of the game. This ensures the episodic signal 
+                    # never accidentally dwarfs the per-move learning signals.
+                    spread_outcome = outcome_sign * (0.5 * mean_abs_reward)
+
+                for arm_p, x_p, imm_reward, log_p in game_history:
+                    if spread_outcome != 0.0:
+                        mab.add_retroactive_reward(arm_p, x_p, spread_outcome)
+                        
+                    final_reward = imm_reward + spread_outcome
+                    log_p["reward"] = final_reward
+                    
+                    if flagged:
+                        log_p["outcome"] = "flagged"
+                    elif board.is_game_over(claim_draw=True):
+                        log_p["outcome"] = board.result(claim_draw=True)
+                    else:
+                        log_p["outcome"] = "unknown"
+                        
+                    with open(log_file, "a") as f:
+                        json.dump(log_p, f)
+                        f.write("\n")
+                        f.flush()
+
+                game_history.clear()
 
             while not board.is_game_over():
                 if board.turn == chess.WHITE:                               # If White, it's turn of the mab agent
-                    # Flush prior White ply (its reward is final now that Black has responded).
                     _flush()
 
                     move, arm, reward, elapsed, budget, x = mab.play(       # Play method of ChessMAB, see mab_agent.py for details
@@ -172,6 +219,7 @@ def run_training_session(
                     log = {                                                 # Log entry; reward may be overwritten in _flush if a terminal bonus is added.
                         "worker": worker_tag,
                         "game": game_id,
+                        "bandit_type": bandit_type,
                         "ply": board.ply(),
                         "move": board.san(move),
                         "arm": arm,
@@ -189,27 +237,32 @@ def run_training_session(
 
                 else:                                                       # It's Stockfish turn
 
-                    result = engine.play(                                   # Stockfish, please play
+                    start_opp = time.time()
+                    result = opponent_engine.play(                                   # Stockfish, please play
                         board,
-                        chess.engine.Limit(depth=6)                          # Lowered from 10 to 6 so opponent is weaker and time allocation differences impact outcomes
+                        chess.engine.Limit(white_clock=mab_clock.time_left, black_clock=opponent_clock.time_left)
                     )
 
                     move = result.move                                      # Get the move played by Stockfish
+                    elapsed_opp = time.time() - start_opp
+                    opponent_clock.spend(elapsed_opp)
 
                 board.push(move)                                            # Play the move, either from White or Black
 
                 # Check if the clock has flagged for either player, if so, end the game
-                if mab_clock.flag():
+                if mab_clock.flag() or opponent_clock.flag():
                     print(
                         f"[Worker {worker_tag}] "
-                        f"Flagged on time."
+                        f"Flagged on time. MAB flagged: {mab_clock.flag()}, Opponent flagged: {opponent_clock.flag()}"
                     )
                     _flush(flagged=True)
+                    _end_game(flagged=True)
                     break
 
                 # If the game just ended (either side's move), flush so terminal reward lands on last White ply.
                 if board.is_game_over(claim_draw=True):
                     _flush()
+                    _end_game()
 
                 # Update the progress of training
                 if progress_callback:
@@ -217,17 +270,27 @@ def run_training_session(
 
             # Safety: flush any pending update if the loop exited without doing so.
             _flush()
+            _end_game()
 
             # Save the current model after each game so training is persisted continuously.
             try:
                 mab.save()                      # Save the model after each game to persist training
-                                                # Note that for neural, the mab is trained every games, but the neural behing it every X games
+                # Checkpointing every 10 games
+                if (game_id + 1) % 10 == 0:
+                    checkpoint_dir = BASE_DIR / "models" / "checkpoints"
+                    os.makedirs(checkpoint_dir, exist_ok=True)
+                    checkpoint_path = str(checkpoint_dir / f"{worker_tag}_{game_id + 1}.npz")
+                    mab_old_path = mab.model_path
+                    mab.model_path = checkpoint_path
+                    mab.save()
+                    mab.model_path = mab_old_path
             except Exception as e:
                 print(f"[Worker {worker_tag}] Warning: could not save model after game {game_id + 1}: {e}")
 
     finally:
         try:
-            engine.quit()             # Quit the engine cleanly when traing is done
+            if agent_engine: agent_engine.quit()
+            if opponent_engine: opponent_engine.quit()
         except Exception:
             pass
 

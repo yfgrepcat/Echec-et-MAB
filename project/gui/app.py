@@ -20,6 +20,7 @@ if str(ROOT_DIR) not in sys.path:
 from mab_agent import ChessMAB, sanitize_bandit_config
 from utils.time_manager import Clock
 from experiments.training import run_training_session, DummyEngine
+from experiments.reporting import load_logs
 
 app = Flask(__name__)
 
@@ -265,26 +266,12 @@ def auto_move():
 @app.route("/api/analysis", methods=["GET"])
 def get_analysis():
     worker_id = request.args.get("worker_id", None)
+    bandit_type = request.args.get("bandit_type", "basic_linucb")
 
-    if worker_id:
-        # Filter logs for a specific worker
-        log_files = [os.path.join(ROOT_DIR, "logs", f"games_worker_{worker_id}.jsonl")]
-        log_files = [f for f in log_files if os.path.exists(f)]
-    else:
-        log_files = glob.glob(os.path.join(ROOT_DIR, "logs", "games_worker_*.jsonl"))
-
-    rows = []
-    for log_file in log_files:
-        with open(log_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    rows.append(json.loads(line))
+    df = load_logs(bandit_type=bandit_type, worker_id=worker_id)
                     
-    if not rows:
+    if df.empty:
         return jsonify({"stats": None})
-        
-    df = pd.DataFrame(rows)
     arm_counts = df["arm"].value_counts().to_dict()
     recent_rewards_series = df["reward"].clip(-15, 15).rolling(window=20).mean().dropna()
     recent_rewards = recent_rewards_series.tail(200).tolist()

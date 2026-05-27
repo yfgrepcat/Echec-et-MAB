@@ -210,13 +210,13 @@ class ChessMAB:
         """ Terminal reward from White's perspective, called once per game when the game has ended.
         clock_flagged=True overrides the result and applies the loss-on-time penalty,
         since python-chess does not know about our custom Clock.
-        Rescaled to +-1.0 to live on the same scale as per-move delta_wdl.
+        Rescaled to +-0.2 to not dwarf the per-move signal, with -1.0 for flagging.
 
         :param board: Final chess board state at game end.
         :type board: chess.Board
         :param clock_flagged: True if the MAB clock ran out, defaults to False
         :type clock_flagged: bool, optional
-        :return: +1.0 White win, -1.0 White loss (or flag), 0.0 draw / not yet over.
+        :return: +0.2 White win, -1.0 White flag, -0.2 White loss, 0.0 draw / not yet over.
         :rtype: float
         """
         if clock_flagged:
@@ -225,9 +225,9 @@ class ChessMAB:
             return 0.0
         result = board.result(claim_draw=True)
         if result == "1-0":
-            return 1.0
+            return 0.2
         if result == "0-1":
-            return -1.0
+            return -0.2
         return 0.0
 
     def play(self, board, clock, training=True) -> tuple[chess.Move, int, float, float, float, np.ndarray]:
@@ -276,3 +276,8 @@ class ChessMAB:
             )
         clock.spend(elapsed) # Update the clock by spending the elapsed time for playing the move
         return (move, arm, reward, elapsed, budget, x) # x is returned so the training loop can flush a deferred update with terminal reward
+
+    def add_retroactive_reward(self, arm: int, x: np.ndarray, reward: float):
+        """ Proxy method to add a retroactive episodic reward to the underlying bandit model. """
+        if hasattr(self.bandit, "add_retroactive_reward"):
+            self.bandit.add_retroactive_reward(arm, x, reward)

@@ -248,6 +248,22 @@ class NeuralLinUCB:
         ):
             self._train_step()
 
+    def add_retroactive_reward(self, arm: int, x: np.ndarray, reward: float):
+        """ Adds an episodic reward to a previously recorded move. Updates the reward vector `b`
+        without modifying the covariance `A_inv` to avoid double-counting the context.
+        Also updates the corresponding entry in the replay buffer.
+        """
+        x1d = self._flatten_context(x)
+        z = self._encode_numpy(x1d)
+        self.b[arm] += float(reward) * z
+        
+        # Update the replay buffer by searching backwards (since it was likely added recently)
+        for i in range(len(self.buffer) - 1, -1, -1):
+            buf_x, buf_arm, buf_reward = self.buffer[i]
+            if buf_arm == arm and np.array_equal(buf_x, x1d):
+                self.buffer[i] = (buf_x, buf_arm, buf_reward + float(reward))
+                break
+
     def _train_step(self):
         """
         Performs a training step on the encoder network using a mini-batch of past experiences 

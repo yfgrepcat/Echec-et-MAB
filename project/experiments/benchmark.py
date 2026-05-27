@@ -25,8 +25,10 @@ def run_benchmark(model_path, bandit_type, games_per_level, levels, time_control
 
     for level in levels:
         print(f"\n=== Benchmark vs SF Level {level} [{bandit_type}] ===")       # For each level, we run games_per_level games against Stockfish at that level
-        engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
-        engine.configure({"Skill Level": level})                                # Set the level of Stockfish for this phase of the benchmark
+        agent_engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
+        agent_engine.configure({"Skill Level": 10})                             # MAB is fixed at Skill Level 10
+        opponent_engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
+        opponent_engine.configure({"Skill Level": level})                       # Opponent is tested at `level`
         wins = 0
         losses = 0
         draws = 0
@@ -40,12 +42,13 @@ def run_benchmark(model_path, bandit_type, games_per_level, levels, time_control
                     board = apply_random_opening(board, openings)
 
                 mab = ChessMAB(                                                 # Initialize the MAB agent
-                    engine,
+                    agent_engine,
                     model_path=model_path,
                     bandit_type=bandit_type,
                 )
 
                 mab_clock = Clock(time_control)                                 # Initialize the clock for Mab agent
+                opponent_clock = Clock(time_control)
 
                 while not board.is_game_over():                                 # While game is not over
 
@@ -56,15 +59,21 @@ def run_benchmark(model_path, bandit_type, games_per_level, levels, time_control
                             training=False,
                         )
                     else:
-                        result = engine.play(                                   # Stockfish to play
+                        start_opp = time.time()
+                        result = opponent_engine.play(                                   # Stockfish to play
                             board,
-                            chess.engine.Limit(depth=6)
+                            chess.engine.Limit(white_clock=mab_clock.time_left, black_clock=opponent_clock.time_left)
                         )
                         move = result.move                                      # Get the move
+                        elapsed_opp = time.time() - start_opp
+                        opponent_clock.spend(elapsed_opp)
                     board.push(move)                                            # Play the move 
 
-                    if mab_clock.flag():
-                        print("MAB flagged.")
+                    if mab_clock.flag() or opponent_clock.flag():
+                        if mab_clock.flag():
+                            print("MAB flagged.")
+                        else:
+                            print("Opponent flagged.")
                         break
 
                 result = board.result()                                         # Print result (1-0 White wins, 0-1 Black wins, or 1/2-1/2 Draw)
@@ -88,7 +97,8 @@ def run_benchmark(model_path, bandit_type, games_per_level, levels, time_control
             pd.DataFrame(results).to_csv(str(csv_path), index=False)
 
         finally:
-            engine.quit()                                                       # Quit properly Stockfish engine 
+            agent_engine.quit()                                                 # Quit properly Stockfish engine 
+            opponent_engine.quit()
 
     print("\n=== FINAL RESULTS ===\n")
     print(pd.DataFrame(results))
