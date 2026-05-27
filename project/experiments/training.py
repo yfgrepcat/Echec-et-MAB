@@ -4,6 +4,7 @@ import os
 import random
 import shutil
 import sys
+import time
 from pathlib import Path
 
 # Ensure local project imports work when executing from repository root.
@@ -107,6 +108,8 @@ def run_training_session(
         bandit_config = sanitize_bandit_config(bandit_config)                       # See method in mab_agent
     except ValueError as e:
         raise RuntimeError(f"Invalid bandit_config: {e}") from e
+
+    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")
 
     mab = ChessMAB(                                                                 # Instialize instance of ChessMAB with the engine, model path and bandit config
         agent_engine,
