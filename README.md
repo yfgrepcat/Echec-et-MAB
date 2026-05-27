@@ -28,23 +28,29 @@ python project/gui/app.py
 
 Train the MAB agent. The system automatically creates `.npz` model checkpoints in `project/models/checkpoints/` every 10 games.
 
-**Basic LinUCB (100 games vs Stockfish level 5):**
+To name your training runs, use the `--worker-id` argument (default is `0`). This dynamically configures all output filenames:
+* **Active Model**: `project/models/worker_{worker_id}.npz`
+* **Checkpoints**: `project/models/checkpoints/{worker_id}_{game_id}.npz`
+* **Logs**: `project/logs/games_worker_{worker_id}.jsonl`
+
+**Basic LinUCB (100 games vs Stockfish level 5, custom worker ID):**
 ```bash
-python project/experiments/training.py --bandit-type basic_linucb --total-games 100 --stockfish-level 5 --time-control 30
+python project/experiments/training.py --bandit-type basic_linucb --worker-id basic_sf5_run --total-games 100 --stockfish-level 5 --time-control 30
 ```
 
-**Neural LinUCB (100 games vs Stockfish level 10):**
+**Neural LinUCB (100 games vs Stockfish level 10, custom worker ID):**
 ```bash
-python project/experiments/training.py --bandit-type neural_linucb --total-games 100 --stockfish-level 10 --time-control 30
+python project/experiments/training.py --bandit-type neural_linucb --worker-id neural_sf10_run --total-games 100 --stockfish-level 10 --time-control 30
 ```
 
 ### 2. Evaluating Checkpoints
 
 Once training has generated checkpoints, evaluate them across multiple opponent difficulty levels to generate a learning curve.
+This will evaluate checkpoints starting with a specific worker ID (default is `0`). Pass `--worker-id` if you used a custom one during training.
 This will output results to `project/logs/eval_results.csv`.
 
 ```bash
-python project/experiments/evaluate_checkpoints.py --games 5 --time-control 30
+python project/experiments/evaluate_checkpoints.py --worker-id basic_sf5_run --games 5 --time-control 30
 ```
 
 ### 3. Generating Analysis
