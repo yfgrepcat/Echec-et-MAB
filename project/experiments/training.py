@@ -4,6 +4,7 @@ import os
 import random
 import shutil
 import sys
+import time
 from pathlib import Path
 
 # Ensure local project imports work when executing from repository root.
@@ -54,6 +55,7 @@ class DummyEngine:
     def analyse(self, board, limit=None):
         class _Score:
             def white(self): return self
+            def __neg__(self): return self
             def is_mate(self): return False
             def mate(self): return 0
             def score(self): return 0
@@ -70,34 +72,61 @@ def run_training_session(
     total_games=100,
     use_openings=False,
     use_random_positions=True,
-    stockfish_level=3,
+    stockfish_level=10,
+    agent_stockfish_level=10,
+    opponent_stockfish_level=None,
     time_control=60,
     bandit_type="basic_linucb",
     bandit_config=None,
     simulate=False,
+    outcome_reward_scale=0.2,
     progress_callback=None
 ):
 
     worker_tag = str(worker_id)                                                     # Tag for the worker
     log_file = str(BASE_DIR / "logs" / f"games_worker_{worker_tag}.jsonl")          # Log file path
+    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")              # Model file path
+    opponent_stockfish_level = (
+        stockfish_level if opponent_stockfish_level is None else opponent_stockfish_level
+    )
 
-    # Try to start Stockfish engine. If not available and `simulate` is True,
-    # fall back to a dummy engine that picks random legal moves. See DummyEngine class above
-    # TODO : talk about it in the report
-    engine = None
-    try:
-        engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)                   # Try to start Stockfish engine  
-        engine.configure({"Skill Level": stockfish_level})                          # Set Stockfish level
-    except FileNotFoundError:
-        if simulate:
-            print("Warning: 'stockfish' not found; using DummyEngine for simulation.")
-            engine = DummyEngine(skill_level=stockfish_level)                       # Use DummyEngine if flag is present
-        else:
+    def _create_engine(level, label):
+        try:
+            engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
+            engine.configure({"Skill Level": level})
+            return engine
+        except FileNotFoundError:
+            if simulate:
+                print(f"Warning: 'stockfish' not found; using DummyEngine for {label}.")
+                return DummyEngine(skill_level=level)
             raise RuntimeError(
                 "Stockfish engine not found in PATH. Install stockfish or run with --simulate to use a dummy engine."
             )
 
-    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")              # Model file path
+    def _limit_for_clocks(white_clock, black_clock):
+        return chess.engine.Limit(
+            white_clock=max(0.0, white_clock.time_left),
+            black_clock=max(0.0, black_clock.time_left),
+            white_inc=0.0,
+            black_inc=0.0,
+        )
+
+    def _game_outcome(board, mab_flagged=False, opponent_flagged=False):
+        if mab_flagged:
+            return -1.0, "0-1"
+        if opponent_flagged:
+            return 1.0, "1-0"
+        if not board.is_game_over(claim_draw=True):
+            return 0.0, "*"
+        result = board.result(claim_draw=True)
+        if result == "1-0":
+            return 1.0, result
+        if result == "0-1":
+            return -1.0, result
+        return 0.0, result
+
+    agent_engine = _create_engine(agent_stockfish_level, "agent")
+    opponent_engine = _create_engine(opponent_stockfish_level, "opponent")
 
     # We need to sanitize the bandit to avoid errors when loading/saving the model
     # TODO : talk about this too on the report
@@ -107,7 +136,7 @@ def run_training_session(
         raise RuntimeError(f"Invalid bandit_config: {e}") from e
 
     mab = ChessMAB(                                                                 # Instialize instance of ChessMAB with the engine, model path and bandit config
-        engine,
+        agent_engine,
         model_path=model_path,
         bandit_config=bandit_config,
         bandit_type=bandit_type,
@@ -128,42 +157,26 @@ def run_training_session(
                         openings
                     )
 
-            # Init clock for MAB. No need for Stockfish take care of its own time management
+            # Both sides are on the same explicit clock; time pressure is now two-sided.
             mab_clock = Clock(time_control)
+            opponent_clock = Clock(time_control)
 
             print(f"[Worker {worker_tag}]" 
                   f"Game {game_id + 1}/{total_games}")
 
-            # Let's play !
-            # Main game loop.
-            # Bandit updates are deferred to the loop so terminal reward (and loss-on-flag penalty) can
-            # be folded into the LAST White ply's update -- including games that ended on Black's move
-            # (e.g. Black mates White). `pending` holds (arm, x, reward, log_record) for the most
-            # recent White ply not yet flushed to the bandit.
-            pending = None
-
-            def _flush(flagged=False):
-                # Flush the pending White ply: optionally add terminal/flag reward, write its
-                # log line (so the recorded reward matches what the bandit saw), and update the bandit.
-                nonlocal pending
-                if pending is None:
-                    return
-                arm_p, x_p, reward_p, log_p = pending
-                # if flagged or board.is_game_over(claim_draw=True):
-                #     reward_p += mab.compute_terminal_reward(board, clock_flagged=flagged)
-                log_p["reward"] = reward_p
-                mab.bandit.update(arm_p, x_p, reward_p)
-                with open(log_file, "a") as f:
-                    json.dump(log_p, f)
-                    f.write("\n")
-                    f.flush()
-                pending = None
+            game_updates = []
+            mab_flagged = False
+            opponent_flagged = False
 
             while not board.is_game_over():
-                if board.turn == chess.WHITE:                               # If White, it's turn of the mab agent
-                    # Flush prior White ply (its reward is final now that Black has responded).
-                    _flush()
+                if mab_clock.flag():
+                    mab_flagged = True
+                    break
+                if opponent_clock.flag():
+                    opponent_flagged = True
+                    break
 
+                if board.turn == chess.WHITE:                               # If White, it's turn of the mab agent
                     move, arm, reward, elapsed, budget, x = mab.play(       # Play method of ChessMAB, see mab_agent.py for details
                         board,
                         mab_clock
@@ -182,17 +195,24 @@ def run_training_session(
                             list(board.legal_moves)
                         ),
                         "clock": mab_clock.time_left,
-                        "stockfish_level": stockfish_level
+                        "white_clock": mab_clock.time_left,
+                        "black_clock": opponent_clock.time_left,
+                        "stockfish_level": opponent_stockfish_level,
+                        "agent_stockfish_level": agent_stockfish_level,
+                        "opponent_stockfish_level": opponent_stockfish_level,
+                        "bandit_type": bandit_type,
                     }
 
-                    pending = (arm, x, reward, log)
+                    game_updates.append((arm, x, reward, log))
 
                 else:                                                       # It's Stockfish turn
-
-                    result = engine.play(                                   # Stockfish, please play
+                    start = time.time()
+                    result = opponent_engine.play(                          # Stockfish, please play
                         board,
-                        chess.engine.Limit(depth=6)                          # Lowered from 10 to 6 so opponent is weaker and time allocation differences impact outcomes
+                        _limit_for_clocks(mab_clock, opponent_clock)
                     )
+                    elapsed = time.time() - start
+                    opponent_clock.spend(elapsed)
 
                     move = result.move                                      # Get the move played by Stockfish
 
@@ -202,34 +222,69 @@ def run_training_session(
                 if mab_clock.flag():
                     print(
                         f"[Worker {worker_tag}] "
-                        f"Flagged on time."
+                        f"MAB flagged on time."
                     )
-                    _flush(flagged=True)
+                    mab_flagged = True
                     break
-
-                # If the game just ended (either side's move), flush so terminal reward lands on last White ply.
-                if board.is_game_over(claim_draw=True):
-                    _flush()
+                if opponent_clock.flag():
+                    print(
+                        f"[Worker {worker_tag}] "
+                        f"Opponent flagged on time."
+                    )
+                    opponent_flagged = True
+                    break
 
                 # Update the progress of training
                 if progress_callback:
                     progress_callback(game_id + 1, total_games, None)
 
-            # Safety: flush any pending update if the loop exited without doing so.
-            _flush()
+            outcome, result_label = _game_outcome(
+                board,
+                mab_flagged=mab_flagged,
+                opponent_flagged=opponent_flagged,
+            )
+            outcome_bonus = (
+                outcome_reward_scale * outcome / len(game_updates)
+                if game_updates else 0.0
+            )
+
+            with open(log_file, "a") as f:
+                for index, (arm, x, move_reward, log) in enumerate(game_updates):
+                    is_last_update = index == len(game_updates) - 1
+                    flag_penalty = -1.0 if mab_flagged and is_last_update else 0.0
+                    reward = move_reward + outcome_bonus + flag_penalty
+                    log.update({
+                        "move_reward": move_reward,
+                        "outcome": outcome,
+                        "outcome_bonus": outcome_bonus,
+                        "flag_penalty": flag_penalty,
+                        "reward": reward,
+                        "result": result_label,
+                        "mab_flagged": mab_flagged,
+                        "opponent_flagged": opponent_flagged,
+                        "final_white_clock": mab_clock.time_left,
+                        "final_black_clock": opponent_clock.time_left,
+                    })
+                    mab.bandit.update(arm, x, reward)
+                    json.dump(log, f)
+                    f.write("\n")
+                f.flush()
 
             # Save the current model after each game so training is persisted continuously.
             try:
-                mab.save()                      # Save the model after each game to persist training
-                                                # Note that for neural, the mab is trained every games, but the neural behing it every X games
+                mab.save()
             except Exception as e:
                 print(f"[Worker {worker_tag}] Warning: could not save model after game {game_id + 1}: {e}")
 
+            if progress_callback:
+                progress_callback(game_id + 1, total_games, result_label)
+
     finally:
-        try:
-            engine.quit()             # Quit the engine cleanly when traing is done
-        except Exception:
-            pass
+        for engine in (agent_engine, opponent_engine):
+            try:
+                engine.quit()             # Quit the engine cleanly when training is done
+            except Exception:
+                pass
 
 # Main method to parse arguments and start the training session
 if __name__ == "__main__":
@@ -239,7 +294,9 @@ if __name__ == "__main__":
     parser.add_argument("--total-games", type=int, default=100)
     parser.add_argument("--use-openings", action="store_true")
     parser.add_argument("--no-random-positions", action="store_true", help="Start from the initial board instead of a random middlegame.")
-    parser.add_argument("--stockfish-level", type=int, default=3)
+    parser.add_argument("--stockfish-level", type=int, default=10, help="Backward-compatible alias for the opponent Stockfish level.")
+    parser.add_argument("--agent-stockfish-level", type=int, default=10)
+    parser.add_argument("--opponent-stockfish-level", type=int, default=None)
     parser.add_argument("--time-control", type=int, default=60)
     parser.add_argument("--bandit-type", default="basic_linucb", choices=["basic_linucb", "neural_linucb"])
     parser.add_argument("--device", default="cpu")
@@ -257,6 +314,8 @@ if __name__ == "__main__":
         use_openings=args.use_openings,
         use_random_positions=not args.no_random_positions,
         stockfish_level=args.stockfish_level,
+        agent_stockfish_level=args.agent_stockfish_level,
+        opponent_stockfish_level=args.opponent_stockfish_level,
         time_control=args.time_control,
         bandit_type=args.bandit_type,
         bandit_config=bandit_config,

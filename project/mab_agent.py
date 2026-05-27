@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import chess
 import chess.engine
 import numpy as np
@@ -59,15 +61,16 @@ class ChessMAB:
         self.bandit_config = bandit_config or {}
         self.n_features = 7 # 7 features for the context (legal moves, time left, move number, material balance, is endgame, is in check, captures)
         self.n_arms = 4 # 4 arms corresponding to 4 time budget categories (very short (0), short (1), medium (2), long (3)) 
-        match self.bandit_type:                     
-            case "basic_linucb":
-                self.bandit = LinUCB(self.n_arms, self.n_features)      
-            case "neural_linucb": # With neural network to learn a better representation of the context features                                   
-                self.bandit = NeuralLinUCB(
-                    n_arms=self.n_arms,
-                    n_features=self.n_features,
-                    **self.bandit_config,
-                )
+        if self.bandit_type == "basic_linucb":
+            self.bandit = LinUCB(self.n_arms, self.n_features)
+        elif self.bandit_type == "neural_linucb": # With neural network to learn a better representation of the context features
+            self.bandit = NeuralLinUCB(
+                n_arms=self.n_arms,
+                n_features=self.n_features,
+                **self.bandit_config,
+            )
+        else:
+            raise ValueError(f"Unsupported bandit_type: {self.bandit_type}")
         self.time_manager = TimeManager() # Time manager to compute time budgets for each move based on the selected arm and the remaining time, legal moves, etc. 
         self.load()
 

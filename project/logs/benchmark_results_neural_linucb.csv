@@ -1,6 +1,0 @@
-bandit_type,model_path,level,games,wins,losses,draws,winrate
-neural_linucb,project/models/worker_worker_p450_sf10_neural.npz,1,5,4,1,0,0.8
-neural_linucb,project/models/worker_worker_p450_sf10_neural.npz,5,5,3,2,0,0.6
-neural_linucb,project/models/worker_worker_p450_sf10_neural.npz,10,5,3,1,1,0.6
-neural_linucb,project/models/worker_worker_p450_sf10_neural.npz,15,5,4,1,0,0.8
-neural_linucb,project/models/worker_worker_p450_sf10_neural.npz,20,5,2,0,3,0.4

@@ -1,6 +1,0 @@
-bandit_type,model_path,level,games,wins,losses,draws,winrate
-basic_linucb,project/models/worker_worker_p450_sf3_basic.npz,1,5,0,5,0,0.0
-basic_linucb,project/models/worker_worker_p450_sf3_basic.npz,5,5,4,1,0,0.8
-basic_linucb,project/models/worker_worker_p450_sf3_basic.npz,10,5,4,1,0,0.8
-basic_linucb,project/models/worker_worker_p450_sf3_basic.npz,15,5,5,0,0,1.0
-basic_linucb,project/models/worker_worker_p450_sf3_basic.npz,20,5,2,0,3,0.4

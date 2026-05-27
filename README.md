@@ -24,40 +24,16 @@ python project/gui/app.py
 
 ## Run training 
 
-### Basic LinUCB : Stockfish niveau 3, 100 parties
+### Basic LinUCB : agent Stockfish niveau 10 vs adversaire niveau 10, 100 parties
 
 ```bash
-python project/experiments/training.py --bandit-type basic_linucb  --total-games 100 --worker-id worker_p100_sf3_basic
+python project/experiments/training.py --bandit-type basic_linucb --total-games 100 --worker-id p100_sf10_basic --agent-stockfish-level 10 --opponent-stockfish-level 10
 ```
 
-### Neural LinUCB : Stockfish niveau 3, 100 parties
+### Neural LinUCB : agent Stockfish niveau 10 vs adversaire niveau 10, 100 parties
 
 ```bash
-python project/experiments/training.py --bandit-type neural_linucb  --total-games 100 --worker-id worker_p100_sf3_neural
-```
-
-### Basic LinUCB : Stockfish niveau 3, 450 parties
-
-```bash
-python project/experiments/training.py --bandit-type basic_linucb  --total-games 450 --worker-id worker_p450_sf3_basic
-```
-
-### Neural LinUCB : Stockfish niveau 3, 450 parties
-
-```bash
-python project/experiments/training.py --bandit-type neural_linucb  --total-games 450 --worker-id worker_p450_sf3_neural
-```
-
-### Basic LinUCB : Stockfish niveau 10, 450 parties
-
-```bash
-python project/experiments/training.py --bandit-type basic_linucb  --total-games 450 --worker-id worker_p450_sf10_basic --stockfish-level 10
-```
-
-### Neural LinUCB : Stockfish niveau 10, 450 parties
-
-```bash
-python project/experiments/training.py --bandit-type neural_linucb  --total-games 450 --worker-id worker_p450_sf10_neural --stockfish-level 10
+python project/experiments/training.py --bandit-type neural_linucb --total-games 100 --worker-id p100_sf10_neural --agent-stockfish-level 10 --opponent-stockfish-level 10
 ```
 
 ## Run Benchmark 
@@ -65,13 +41,13 @@ python project/experiments/training.py --bandit-type neural_linucb  --total-game
 ### Basic LinUCB
 
 ```bash
-python project/experiments/benchmark.py --bandit-type basic_linucb --model-path project/models/worker_runtest_yo.npz 
+python project/experiments/benchmark.py --bandit-type basic_linucb --model-path project/models/worker_p100_sf10_basic.npz --agent-stockfish-level 10 --levels 5 8 10 12
 ```
 
 ### Neural LinUCB 
 
 ```bash
-python project/experiments/benchmark.py --bandit-type neural_linucb --model-path project/models/worker_runtest_yo_neural.npz
+python project/experiments/benchmark.py --bandit-type neural_linucb --model-path project/models/worker_p100_sf10_neural.npz --agent-stockfish-level 10 --levels 5 8 10 12
 ```
 
 ## Run Analysis
@@ -79,11 +55,11 @@ python project/experiments/benchmark.py --bandit-type neural_linucb --model-path
 ### Basic LinUCB
 
 ```bash
-./.venv/bin/python project/experiments/analysis.py   --log-file project/logs/games_worker_runtest_yo.jsonl 
+./.venv/bin/python project/experiments/analysis.py --worker-id p100_sf10_basic --bandit-type basic_linucb
 ```
 
 ### Neural LinUCB 
 
 ```bash
-./.venv/bin/python project/experiments/analysis.py   --log-file project/logs/games_worker_runtest_yo_neural.jsonl 
+./.venv/bin/python project/experiments/analysis.py --worker-id p100_sf10_neural --bandit-type neural_linucb
 ```

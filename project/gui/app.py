@@ -1,16 +1,13 @@
 import os
 import re
 import sys
-import json
 import time
-import glob
 import threading
 import subprocess
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template
 import chess
 import chess.engine
-import pandas as pd
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
@@ -19,7 +16,12 @@ if str(ROOT_DIR) not in sys.path:
 
 from mab_agent import ChessMAB, sanitize_bandit_config
 from utils.time_manager import Clock
-from experiments.training import run_training_session, DummyEngine
+from experiments.training import run_training_session
+from experiments.reporting import (
+    load_benchmark_results,
+    load_training_logs,
+    summarize_training_logs,
+)
 
 app = Flask(__name__)
 
@@ -265,61 +267,10 @@ def auto_move():
 @app.route("/api/analysis", methods=["GET"])
 def get_analysis():
     worker_id = request.args.get("worker_id", None)
+    bandit_type = request.args.get("bandit_type", "basic_linucb")
 
-    if worker_id:
-        # Filter logs for a specific worker
-        log_files = [os.path.join(ROOT_DIR, "logs", f"games_worker_{worker_id}.jsonl")]
-        log_files = [f for f in log_files if os.path.exists(f)]
-    else:
-        log_files = glob.glob(os.path.join(ROOT_DIR, "logs", "games_worker_*.jsonl"))
-
-    rows = []
-    for log_file in log_files:
-        with open(log_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    rows.append(json.loads(line))
-                    
-    if not rows:
-        return jsonify({"stats": None})
-        
-    df = pd.DataFrame(rows)
-    arm_counts = df["arm"].value_counts().to_dict()
-    recent_rewards_series = df["reward"].clip(-15, 15).rolling(window=20).mean().dropna()
-    recent_rewards = recent_rewards_series.tail(200).tolist()
-    
-    level_stats = {}
-    if "stockfish_level" in df.columns:
-        for level, group in df.groupby("stockfish_level"):
-            smoothed = group["reward"].clip(-15, 15).rolling(window=20).mean().dropna()
-            level_stats[str(level)] = {
-                "avg_reward": round(group["reward"].mean(), 3),
-                "rewards": smoothed.tail(200).tolist()
-            }
-            
-    phase_stats = {}
-    if "ply" in df.columns and "elapsed" in df.columns:
-        df_phase = df.copy()
-        df_phase['move_number'] = df_phase['ply'] // 2
-        df_phase['phase_jeu'] = (df_phase['move_number'] // 5) * 5
-        phase_data = df_phase.groupby('phase_jeu')['elapsed'].mean()
-        phase_stats = {int(k): round(float(v), 2) for k, v in phase_data.items()}
-        
-    arm_time_stats = {}
-    if "arm" in df.columns and "elapsed" in df.columns:
-        arm_time_df = df[df["arm"] != "-"]
-        if not arm_time_df.empty:
-            arm_time_data = arm_time_df.groupby("arm")["elapsed"].mean()
-            arm_time_stats = {str(k): round(float(v), 2) for k, v in arm_time_data.items()}
-    
-    return jsonify({
-        "arm_counts": arm_counts,
-        "recent_rewards": recent_rewards,
-        "level_stats": level_stats,
-        "phase_stats": phase_stats,
-        "arm_time_stats": arm_time_stats
-    })
+    df = load_training_logs(worker_id=worker_id, bandit_type=bandit_type)
+    return jsonify(summarize_training_logs(df))
 
 @app.route("/api/train", methods=["POST"])
 def run_train():
@@ -355,6 +306,8 @@ def run_train():
             use_openings=True,
             use_random_positions=False,
             stockfish_level=sf_level,
+            agent_stockfish_level=10,
+            opponent_stockfish_level=sf_level,
             time_control=time_control,
             bandit_type=bandit_type,
             bandit_config=bandit_config,
@@ -389,16 +342,19 @@ def run_benchmark():
     benchmark_is_running = True
     def bench_task():
         global benchmark_is_running
-        cmd = [
-            sys.executable,
-            os.path.join(ROOT_DIR, "experiments", "benchmark.py"),
-            "--model-path", model_path,
-            "--bandit-type", bandit_type,
-            "--games-per-level", "2",
-            "--levels", "1", "5", "10",
-        ]
-        subprocess.run(cmd)
-        benchmark_is_running = False
+        try:
+            cmd = [
+                sys.executable,
+                os.path.join(ROOT_DIR, "experiments", "benchmark.py"),
+                "--model-path", model_path,
+                "--bandit-type", bandit_type,
+                "--games-per-level", "2",
+                "--levels", "5", "8", "10", "12",
+                "--agent-stockfish-level", "10",
+            ]
+            subprocess.run(cmd)
+        finally:
+            benchmark_is_running = False
     threading.Thread(target=bench_task).start()
     return jsonify({"status": "started"})
 
@@ -406,9 +362,10 @@ def run_benchmark():
 def get_benchmarks():
     global benchmark_is_running
     bandit_type = request.args.get("bandit_type", "basic_linucb")
-    csv_path = os.path.join(ROOT_DIR, "logs", f"benchmark_results_{bandit_type}.csv")
     try:
-        df = pd.read_csv(csv_path)
+        df = load_benchmark_results(bandit_type)
+        if df.empty:
+            return jsonify({"results": None, "is_running": benchmark_is_running})
         return jsonify({
             "results": df.to_dict(orient="records"),
             "is_running": benchmark_is_running

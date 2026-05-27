@@ -412,7 +412,7 @@ $('#runBenchBtn').click(() => {
 
 function loadAnalysis() {
     const workerId = $('#analysisWorkerSelect').val();
-    const params = {};
+    const params = { bandit_type: $('#analysisBanditType').val() };
     if (workerId) {
         params.worker_id = workerId;
     }
@@ -490,7 +490,7 @@ function loadTrainingChart() {
     let workerId = currentTrainingWorkerId; // Use the locked ID
     if (!workerId) return; // Do nothing if training hasn't started or we don't know the ID
 
-    const params = { worker_id: workerId };
+    const params = { worker_id: workerId, bandit_type: $('#trainBanditType').val() };
 
     $.get('/api/analysis', params, (res) => {
         if (!res.level_stats) return;

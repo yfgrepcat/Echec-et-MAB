@@ -64,10 +64,14 @@ def _load(log_file=None, log_pattern="logs/games_worker_*.jsonl"):
 
 def _decompose(df):
     # Recover time_penalty and delta_wdl from logged reward + elapsed.
+    # New logs keep the dense per-move component in move_reward; use it so the
+    # spread outcome bonus and flag penalty do not pollute arm separability.
     # Filter out terminal-dominated rows (|reward| close to 1.0) so the decomposition
     # only sees the per-move signal -- terminal rewards make delta_wdl recovery
     # nonsensical for the last-of-game ply.
     df = df.copy()
+    reward_col = "move_reward" if "move_reward" in df.columns else "reward"
+    df["reward"] = df[reward_col]
     df["time_penalty"] = TIME_PENALTY_COEF * np.minimum(df["elapsed"] / TIME_PENALTY_REF, 1.0)
     df["delta_wdl"] = df["reward"] + df["time_penalty"]
     # Drop rows whose reward looks dominated by terminal +-1.0 (i.e. last ply of a game).

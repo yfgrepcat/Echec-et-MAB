@@ -1,6 +1,3 @@
-import numpy as np
-
-
 # Clock class to manage time for each move
 class Clock:
     """Class to manage the time left for the game,
@@ -28,7 +25,7 @@ class Clock:
         return self.time_left <= 0.0
 
 
-# TimeManager computes the time budget for each move based on the arm, remaining time, legal moves, move number and endgame status
+# TimeManager computes the time budget associated with each arm.
 class TimeManager:
     """TimeManager computes a time-budget.
     This time-budget is used to limit the time spent on each move,
@@ -42,42 +39,20 @@ class TimeManager:
     :rtype: TimeManager
     """
 
-    def __init__(self, arm0=0.02, arm1=0.1, arm2=0.5, arm3=2.0):
-        # Wide multiplier range (100×) so that the fastest arm genuinely handicaps the engine.
-        # At 60s time control / ~40 expected moves → base_time ≈ 1.5s:
-        #   arm 0: 0.02 × 1.5 ≈ 30ms  → Stockfish depth ~4-6  (noticeably weaker moves)
-        #   arm 1: 0.1  × 1.5 ≈ 150ms → Stockfish depth ~8-10 (slightly constrained)
-        #   arm 2: 0.5  × 1.5 ≈ 750ms → Stockfish depth ~12-14 (reasonable)
-        #   arm 3: 2.0  × 1.5 ≈ 3.0s  → Stockfish depth ~18+  (near-optimal)
-        # Previous values [0.5, 1.0, 2.0, 4.0] all gave enough time for near-optimal play,
-        # making arms indistinguishable (Cohen's d < 0.1 across 27k moves).
-        self.ARM_MULTIPLIERS = [
-            arm0,  # Arm 0: ultra-fast, genuinely constrained
-            arm1,  # Arm 1: fast, slightly constrained
-            arm2,  # Arm 2: moderate, reasonable thinking time
-            arm3,  # Arm 3: slow, deep search
+    def __init__(self, arm0=0.05, arm1=0.3, arm2=1.0, arm3=3.0, proportional_floor=0.001):
+        # Fixed think-times make the arms easy to interpret and keep them separated.
+        # On a 60s clock, always choosing arm 3 is intentionally unaffordable.
+        self.ARM_BUDGETS = [
+            arm0,  # Arm 0: blitz / save clock
+            arm1,  # Arm 1: light search
+            arm2,  # Arm 2: normal search
+            arm3,  # Arm 3: deep search
         ]
+        self.proportional_floor = proportional_floor
 
     # Compute the time budget for a given move based on game state and arm choice
     def compute_time_budget(self, arm, remaining_time, legal_moves, endgame):
-        expected_remaining_moves = 20 if endgame else 40  # Standard chess heuristic
-        base_time = (
-            remaining_time / expected_remaining_moves
-        )  # In average, we want to spend and equal fraction of remaining time
-        # --> if startgame, we have time to explore, in endgame not
-        complexity = (
-            legal_moves / 30
-        )  # 30 legal moves is a very complex position, 10 legal moves is a simple position
-        # --> for a lot of legal move, the complexity is high so more time is needed to choose arm wisly
-        complexity = np.clip(
-            complexity, 0.5, 2.0
-        )  # Limit complexity factor to avoid taking too much time
-        arm_factor = self.ARM_MULTIPLIERS[
-            arm
-        ]  # Arm normalization factor, higher arms get more time
-        budget = base_time * complexity * arm_factor  # Budget is calculated
-        budget = min(
-            budget, remaining_time * 0.25
-        )  # Don't allow spending more than 25% of remaining time on a single move
-        budget = max(budget, 0.01)  # To avoid flaging immediately (minimum 100ms)
-        return budget
+        del legal_moves, endgame
+        fixed_budget = self.ARM_BUDGETS[arm]
+        floor = max(0.01, remaining_time * self.proportional_floor)
+        return max(fixed_budget, floor)
