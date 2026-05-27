@@ -71,6 +71,17 @@ def analyse_results(log_file=None, log_pattern="logs/games_worker_*.jsonl"):
     print("\nAverage reward by Stockfish level:")
     print(df.groupby("stockfish_level")["reward"].mean())
 
+    # Raw reward for every move, without any aggregation or smoothing.
+    # This shows the full per-move signal exactly as recorded in the logs.
+    raw_reward = df["reward"].reset_index(drop=True)
+    plt.figure(figsize=(12, 5))
+    plt.scatter(raw_reward.index, raw_reward, s=10, alpha=0.5)
+    plt.title("Raw Reward per Move")
+    plt.xlabel("Move index")
+    plt.ylabel("Reward")
+    plt.grid()
+    plt.show()
+
     # Graph of the rolling average reward over time (window 100 moves)
     plt.figure(figsize=(12, 6))
     rolling_reward = (
