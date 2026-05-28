@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-
+# Method to define the neural network encoder 
 class RewardNetwork(nn.Module):
     # Method to initialize the network with one hidden layer by default and ReLU activation
     def __init__(self, input_dim: int, hidden_sizes=(32,), repr_dim: int = 16):
@@ -20,25 +20,25 @@ class RewardNetwork(nn.Module):
         :type repr_dim: int, optional
         """
         super().__init__()
+
         # Allow `hidden_sizes` to be provided as an int (single layer) or an iterable
+        # Needed for initialization from mab_agent, which provides hidden_sizes as an int
         if isinstance(hidden_sizes, int):
             hidden_sizes = (hidden_sizes,)
 
-        layers = []  # layers is a list that will contain the layers of the network, built sequentially
-        in_dim = input_dim  # Number in of feature, the input dimension of first layer
-        for h in (
-            hidden_sizes
-        ):  # For each hidden layer, we add a linear layer followed by a ReLU activation
-            layers.append(nn.Linear(in_dim, h))
-            layers.append(nn.ReLU())
-            in_dim = h  # Update in_dim for the next layer, the output size of the current layer
-        layers.append(
+        layers = []                 # layers is a list that will contain the layers of the network, built sequentially
+        in_dim = input_dim          # Number in of feature, the input dimension of first layer
+        for h in (hidden_sizes):    # For each hidden layer, we add a linear layer followed by a ReLU activation
+            layers.append(nn.Linear(in_dim, h))     # Linear layer is used to transform the input from in_dim to h dimensions, where h is the number of neurons in this hidden layer
+            layers.append(nn.ReLU())                # ReLU activation function is applied after the linear transformation to introduce non-linearity, allowing the network to learn more complex representations
+            in_dim = h              # Update in_dim for the next layer, the output size of the current layer
+        layers.append(              
             nn.Linear(in_dim, repr_dim)
-        )  # Final layer to output the latent reprensentaiton,
+        )                           # Final layer to output the latent reprensentaiton,
         layers.append(nn.ReLU())
         self.net = nn.Sequential(
             *layers
-        )  # Sequential permit to chain the layer together
+        )                           # Sequential permit to chain the layer together and simplify forward pass 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the network to get the latent representation.
@@ -51,34 +51,32 @@ class RewardNetwork(nn.Module):
         return self.net(x)
 
 
-# NeuralLinUCB is a contextual bandit algorithm that uses a neural network to learn a latent representation (lower-dimensional (reducted)) of the context, and then applies LinUCB in that latent space
-# This neural network first turns the original chess context into a smaller learned representation and then the bandit uses a linear UCB on that learned representation instead of on the raw features
-# The goal of this neuralLinUCB is to improve performance in complex contexts by learning a more efficient representation, leading to better exploration/exploitation decisions
-# Implementation of this neural LinUCB is inspired by the paper "Neural Linear Bandits: Overcoming Catastrophic Forgetting through Likelihood Matching" (https://arxiv.org/pdf/1901.08612) and adapted to our chess context and constraints
-# Copilot helped a lot to impement this class and to understand the maths
-# Each neuron act like that y=activation(w⋅x+b), where w is the weight vector, x is the input vector, b is the bias, and activation is a function like ReLU (same used in the linUCB)
-# The neural network is trained once in a while (train_every steps) using a buffer that stores past contexts, actions, and rewards. This is how the encoder learns
-# NeuralLinUCB first maps the 7 chess context features to a learned latent vector,
-# then LinUCB works on that latent vector instead of on the raw features.
-# The latent size is a design choice: it does not come from the data automatically.
-# This version is inspired by Neural Linear Bandits, but kept intentionally small
+# NeuralLinUCB is a contextual bandit algorithm that uses a neural network to learn a latent representation of the context, then applies LinUCB in that learned space.
+# The encoder transforms the raw chess features into a fixed-size embedding z, which is not necessarily smaller than the input dimension: it is a learned representation, not a guaranteed compression.
+# LinUCB then operates on z instead of directly on the raw features, so the bandit stays linear in the learned space while the overall model is non-linear in the original input.
+# The goal is to make the context easier to exploit for the bandit by learning useful combinations of the 7 input features, which can improve exploration/exploitation decisions.
+# Implementation of this neural LinUCB is inspired by the paper "Neural Linear Bandits: Overcoming Catastrophic Forgetting through Likelihood Matching" (https://arxiv.org/pdf/1901.08612) and adapted to our chess context and constraints.
+# Each hidden neuron computes a weighted sum of the input plus a bias, u = w·x + b, then applies ReLU element-wise: a = max(0, u). The output of all neurons forms the layer representation.
+# The neural network is trained periodically (every train_every steps) from a replay buffer storing past contexts, actions, and rewards, so the encoder keeps improving over time.
+# The latent size is a design choice: it is fixed by the architecture and does not come directly from the data.
+# This version is inspired by Neural Linear Bandits, but kept intentionally small.
 class NeuralLinUCB:
     # The encoder takes 7 input features and outputs a latent vector of size representation_dim.
     def __init__(
         self,
-        n_arms: int,  # Number of arms (actions)
-        n_features: int,  # Input features
-        alpha: float = 1.5,  # Exploration parameter (just like in basic LinUCB)
-        hidden_sizes: int = 10,  # One hidden layer: 10 neurons, simple and enough for the current 7 features
-        representation_dim: int = 16,  # Output size of the encoder; this is the latent context size used by LinUCB
-        lr: float = 1e-3,  # Learning rate for the encoder network
-        ridge_lambda: float = 1.0,  # Regularization (ridge) for the linear part; affects init scale of A_inv
-        batch_size: int = 32,  # Number of past training examples sampled at once from the replay buffer
-        train_every: int = 5,  # Perform a training step every N updates
-        replay_size: int = 10000,  # Maximum size of the replay buffer
-        seed: int = 42,  # Random seed for reproducibility
-        device: str = "auto",  # Device hint for torch: 'auto'|'cpu'|'cuda'|'mps'
-        force_cpu: bool = False,  # If True, force CPU even when GPU is available
+        n_arms: int,                    # Number of arms (actions)
+        n_features: int,                # Input features
+        alpha: float = 1.5,             # Exploration parameter (just like in basic LinUCB)
+        hidden_sizes: int = 10,         # One hidden layer: 10 neurons, simple and enough for the current 7 features
+        representation_dim: int = 16,   # Output size of the encoder; this is the latent context size used by LinUCB
+        lr: float = 1e-3,               # Learning rate for the encoder network
+        ridge_lambda: float = 1.0,      # Regularization (ridge) for the linear part; affects init scale of A_inv
+        batch_size: int = 32,           # Number of past training examples sampled at once from the replay buffer
+        train_every: int = 5,           # Perform a training step every N updates
+        replay_size: int = 10000,       # Maximum size of the replay buffer
+        seed: int = 42,                 # Random seed for reproducibility
+        device: str = "auto",           # Device hint for torch: 'auto'|'cpu'|'cuda'|'mps'
+        force_cpu: bool = False,        # If True, force CPU even when GPU is available
     ):
         self.n_arms = n_arms
         self.n_features = n_features
