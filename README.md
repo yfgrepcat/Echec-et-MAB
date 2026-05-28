@@ -22,9 +22,9 @@ An approach to enhancing chess engine performance using Multi-Armed Bandits (MAB
 
 The reward function is the agent's only "compass": it mathematically translates what good behavior is — namely, finding excellent moves, but as quickly as possible. To model this problem, the reward is split into two components: a per-move reward and a terminal end-of-game reward.
 
-$$R = \Delta\text{WDL} - \text{time\_penalty}$$
+$$R = \Delta\mathrm{WDL} - \mathrm{TimePenalty}$$
 
-$$R = \Delta\text{WDL} - 0.015 \times \min\!\left(\frac{\text{elapsed\_time}}{1.5},\ 1\right)$$
+$$R = \Delta\mathrm{WDL} - 0.015 \times \min\left(\frac{\mathrm{ElapsedTime}}{1.5},\ 1\right)$$
 
 Where WDL (Win/Draw/Loss) is the win probability computed by Stockfish before and after the move. Move quality is measured by **$\Delta\text{WDL}$** (positional improvement), then a time penalty is applied. The parameter choices are deliberate: **$\Delta\text{WDL}$** is bounded between -1 and 1, and the time penalty is capped via the `min` so that it does not dominate the entire signal and force the agent to constantly play too fast.
 
