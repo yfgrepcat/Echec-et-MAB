@@ -38,7 +38,7 @@ In one of our training runs, the basic LinUCB agent used a stockfish level 10 mo
     <img src="rsc/img/stockfish_lvl10_vs_lvl10.webp" alt="LinUCB Win Rate" width="600"/>
 </p>
 
-Multiple models and statistics analyses can be found in the `project/logs/` directory, and the generated learning curves are in `project/analysis/`.
+Our models can be found under the [`project/models/`](https://github.com/yfgrepcat/Echec-et-MAB/tree/main/project/models) directory. All of the analysis of said models can be found under the [`project/reporting/`](https://github.com/yfgrepcat/Echec-et-MAB/tree/main/project/reporting) directory. The training logs are available under [`project/logs/`](https://github.com/yfgrepcat/Echec-et-MAB/tree/main/project/logs).
 
 The training process allowed us to improve the MAB agent's performance against Stockfish, demonstrating the potential of MAB algorithms in optimizing decision-making under time constraints in chess. The results indicate that the agent can learn to select better moves over time and learns the crucial importance of time management in chess, as evidenced by the lowering of the mean game time.
 
