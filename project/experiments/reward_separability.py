@@ -1,16 +1,3 @@
-"""Statistical diagnostic for the MAB reward function.
-
-Answers two questions from a training log:
-
-1. Is the reward function separable across arms? -- per-pair Cohen's d and
-   the per-arm sample size needed to detect that effect at 80% power.
-2. Is the per-move signal dominated by move QUALITY (delta_wdl) or by the
-   TIME PENALTY? -- the same calculations on quality-only and penalty-only.
-
-No new dependencies; reuses pandas/numpy/matplotlib. Recovers delta_wdl from
-the logged reward by inverting compute_reward()'s formula.
-"""
-
 import argparse
 import glob
 import json
@@ -180,6 +167,15 @@ def _plot_distributions(df, savepath=None):
 
 
 def analyse(log_file=None, log_pattern="logs/games_worker_*.jsonl", savepath=None):
+    """ Analyse the reward function separability from a training log.
+
+    :param log_file: The path to a single log file to analyse, defaults to None
+    :type log_file: str, optional
+    :param log_pattern: The glob pattern used when --log-file is not provided, defaults to "logs/games_worker_*.jsonl"
+    :type log_pattern: str, optional
+    :param savepath: The path to save the diagnostic plot (PNG), defaults to None
+    :type savepath: str, optional
+    """
     raw = _load(log_file=log_file, log_pattern=log_pattern)
     if raw.empty:
         print("No data found.")

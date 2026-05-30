@@ -18,10 +18,10 @@ def material_balance(board: chess.Board) -> int:
     :return: Standard material balance score.
     :rtype: int
     """
-    score = 0                                                           # Positive score favors White, negative favors Black
+    score = 0 # Positive score favors White, negative favors Black
     for piece_type, value in PIECE_VALUES.items():                      
-        score += len(board.pieces(piece_type, chess.WHITE)) * value     # Multiply the number of (piece_type) pieces by their value
-        score -= len(board.pieces(piece_type, chess.BLACK)) * value     # Subtract the same for Black pieces to get the net material balance
+        score += len(board.pieces(piece_type, chess.WHITE)) * value # Multiply the number of (piece_type) pieces by their value
+        score -= len(board.pieces(piece_type, chess.BLACK)) * value # Subtract the same for Black pieces to get the net material balance
     return score                               
 
 def is_endgame(board: chess.Board) -> bool:
@@ -36,11 +36,11 @@ def is_endgame(board: chess.Board) -> bool:
     :rtype: bool
     """
     queens = len(board.pieces(chess.QUEEN, chess.WHITE)) + \
-             len(board.pieces(chess.QUEEN, chess.BLACK))                # Count total queens on the board
+             len(board.pieces(chess.QUEEN, chess.BLACK)) # Count total queens on the board
     minor_pieces = (
         len(board.pieces(chess.BISHOP, chess.WHITE)) +
-        len(board.pieces(chess.BISHOP, chess.BLACK)) +                  # Count total bishops
+        len(board.pieces(chess.BISHOP, chess.BLACK)) +   # Count total bishops
         len(board.pieces(chess.KNIGHT, chess.WHITE)) +  
-        len(board.pieces(chess.KNIGHT, chess.BLACK))                    # Count total knights
+        len(board.pieces(chess.KNIGHT, chess.BLACK))     # Count total knights
     )
-    return queens == 0 or minor_pieces <= 2                             # Consider endgame if no queens or very few minor pieces remaining  
+    return queens == 0 or minor_pieces <= 2 # Consider endgame if no queens or very few minor pieces remaining  

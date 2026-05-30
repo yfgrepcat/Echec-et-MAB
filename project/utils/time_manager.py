@@ -1,4 +1,3 @@
-# Clock class to manage time for each move
 class Clock:
     """Class to manage the time left for the game,
     allowing to spend time on moves and check if the clock has ran out.
@@ -25,7 +24,6 @@ class Clock:
         return self.time_left <= 0.0
 
 
-# TimeManager computes the time budget associated with each arm.
 class TimeManager:
     """TimeManager computes a time-budget.
     This time-budget is used to limit the time spent on each move,
@@ -40,8 +38,6 @@ class TimeManager:
     """
 
     def __init__(self, arm0=0.05, arm1=0.3, arm2=1.0, arm3=3.0, proportional_floor=0.001):
-        # Fixed think-times make the arms easy to interpret and keep them separated.
-        # On a 60s clock, always choosing arm 3 is intentionally unaffordable.
         self.ARM_BUDGETS = [
             arm0,  # Arm 0: blitz / save clock
             arm1,  # Arm 1: light search
@@ -50,8 +46,20 @@ class TimeManager:
         ]
         self.proportional_floor = proportional_floor
 
-    # Compute the time budget for a given move based on game state and arm choice
     def compute_time_budget(self, arm, remaining_time, legal_moves, endgame):
+        """ Compute the time budget for a given move based on the current game state and the chosen arm.
+
+        :param arm: The index of the arm chosen for this move, which corresponds to a specific time budget strategy.
+        :type arm: int
+        :param remaining_time: The amount of time remaining in the game.
+        :type remaining_time: float
+        :param legal_moves: The number of legal moves available.
+        :type legal_moves: int
+        :param endgame: A flag indicating whether the game is in the endgame phase.
+        :type endgame: bool
+        :return: The computed time budget for the move.
+        :rtype: float
+        """
         del legal_moves, endgame
         fixed_budget = self.ARM_BUDGETS[arm]
         floor = max(0.01, remaining_time * self.proportional_floor)

@@ -64,9 +64,6 @@ class DummyEngine:
     # Quit used when the game if finished
     def quit(self): pass
 
-# Method to train a model : it will play `total_games` against Stockfish and log the results in a jsonl file
-# Model trained is saved after each game to persist training. 
-# Models are saved in `models/worker_{worker_id}.npz` and logs in `logs/games_worker_{worker_id}.jsonl` 
 def run_training_session(
     worker_id="0",
     total_games=100,
@@ -82,10 +79,44 @@ def run_training_session(
     outcome_reward_scale=0.2,
     progress_callback=None
 ):
+    """Method to train a model : it will play `total_games` against Stockfish and log the results in a jsonl file.
+    Model trained is saved after each game to persist training.
+    Models are saved in `models/worker_{worker_id}.npz` and logs in `logs/games_worker_{worker_id}.jsonl`
 
-    worker_tag = str(worker_id)                                                     # Tag for the worker
-    log_file = str(BASE_DIR / "logs" / f"games_worker_{worker_tag}.jsonl")          # Log file path
-    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")              # Model file path
+    :param worker_id: Id for the worker, defaults to "0"
+    :type worker_id: str, optional
+    :param total_games: Total number of games to play, defaults to 100
+    :type total_games: int, optional
+    :param use_openings: Whether to use opening moves, defaults to False
+    :type use_openings: bool, optional
+    :param use_random_positions: Whether to use random positions, defaults to True
+    :type use_random_positions: bool, optional
+    :param stockfish_level: The skill level of the Stockfish engine, defaults to 10
+    :type stockfish_level: int, optional
+    :param agent_stockfish_level: The skill level of the agent's Stockfish engine, defaults to 10
+    :type agent_stockfish_level: int, optional
+    :param opponent_stockfish_level: The skill level of the opponent's Stockfish engine, defaults to None
+    :type opponent_stockfish_level: _type_, optional
+    :param time_control: The time control for each game, defaults to 60
+    :type time_control: int, optional
+    :param bandit_type: The type of bandit algorithm to use, defaults to "basic_linucb"
+    :type bandit_type: str, optional
+    :param bandit_config: The configuration for the bandit algorithm, defaults to None
+    :type bandit_config: _type_, optional
+    :param simulate: Whether to simulate the training process, defaults to False
+    :type simulate: bool, optional
+    :param outcome_reward_scale: The scale for the reward based on game outcome, defaults to 0.2
+    :type outcome_reward_scale: float, optional
+    :param progress_callback: A callback function to report training progress, defaults to None
+    :type progress_callback: _type_, optional
+    :raises RuntimeError: If the Stockfish engine is not found and simulation is not enabled, or if the bandit configuration is invalid.
+    :return: A dictionary containing the results of the training session, including logs and model paths.
+    :rtype: dict
+    """
+
+    worker_tag = str(worker_id)
+    log_file = str(BASE_DIR / "logs" / f"games_worker_{worker_tag}.jsonl")
+    model_path = str(BASE_DIR / "models" / f"worker_{worker_tag}.npz")
     opponent_stockfish_level = (
         stockfish_level if opponent_stockfish_level is None else opponent_stockfish_level
     )
@@ -131,28 +162,28 @@ def run_training_session(
     # We need to sanitize the bandit to avoid errors when loading/saving the model
     # TODO : talk about this too on the report
     try:
-        bandit_config = sanitize_bandit_config(bandit_config)                       # See method in mab_agent
+        bandit_config = sanitize_bandit_config(bandit_config)
     except ValueError as e:
         raise RuntimeError(f"Invalid bandit_config: {e}") from e
 
-    mab = ChessMAB(                                                                 # Instialize instance of ChessMAB with the engine, model path and bandit config
+    mab = ChessMAB( # Instialize instance of ChessMAB with the engine, model path and bandit config
         agent_engine,
         model_path=model_path,
         bandit_config=bandit_config,
         bandit_type=bandit_type,
     )
 
-    openings = []                                                                   # Empty opening moves by default, will be loaded if use_openings is True
+    openings = [] # Empty opening moves by default, will be loaded if use_openings is True
     try:
         for game_id in range(total_games):
 
             # Choose either we start training from initial position or middle game position (if True)
-            if use_random_positions: board = load_random_middlegame()               # Start from a middle game position
+            if use_random_positions: board = load_random_middlegame() # Start from a middle game position
             else:   
-                board = chess.Board()                                               # Start from the initial position
-                if use_openings:                                                    # If the user choosed to use openings
-                    openings = load_openings()                                      # Load openings moves from book
-                    board = apply_random_opening(                                   # Choose a moove and play it. See Method in utils/opening_book.py
+                board = chess.Board() # Start from the initial position
+                if use_openings: # If the user choosed to use openings
+                    openings = load_openings() # Load openings moves from book
+                    board = apply_random_opening( # Choose a moove and play it. See Method in utils/opening_book.py
                         board,
                         openings
                     )
@@ -176,13 +207,13 @@ def run_training_session(
                     opponent_flagged = True
                     break
 
-                if board.turn == chess.WHITE:                               # If White, it's turn of the mab agent
-                    move, arm, reward, elapsed, budget, x = mab.play(       # Play method of ChessMAB, see mab_agent.py for details
+                if board.turn == chess.WHITE: # If White, it's turn of the mab agent
+                    move, arm, reward, elapsed, budget, x = mab.play(
                         board,
                         mab_clock
                     )
 
-                    log = {                                                 # Log entry; reward may be overwritten in _flush if a terminal bonus is added.
+                    log = { # Log entry; reward may be overwritten in _flush if a terminal bonus is added.
                         "worker": worker_tag,
                         "game": game_id,
                         "ply": board.ply(),
@@ -205,18 +236,18 @@ def run_training_session(
 
                     game_updates.append((arm, x, reward, log))
 
-                else:                                                       # It's Stockfish turn
+                else: # It's Stockfish's turn
                     start = time.time()
-                    result = opponent_engine.play(                          # Stockfish, please play
+                    result = opponent_engine.play(
                         board,
                         _limit_for_clocks(mab_clock, opponent_clock)
                     )
                     elapsed = time.time() - start
                     opponent_clock.spend(elapsed)
 
-                    move = result.move                                      # Get the move played by Stockfish
+                    move = result.move # Get the move played by Stockfish
 
-                board.push(move)                                            # Play the move, either from White or Black
+                board.push(move) # Play the move, either from White or Black
 
                 # Check if the clock has flagged for either player, if so, end the game
                 if mab_clock.flag():
@@ -269,7 +300,6 @@ def run_training_session(
                     json.dump(log, f)
                     f.write("\n")
                 f.flush()
-
             # Save the current model after each game so training is persisted continuously.
             try:
                 mab.save()
@@ -282,11 +312,10 @@ def run_training_session(
     finally:
         for engine in (agent_engine, opponent_engine):
             try:
-                engine.quit()             # Quit the engine cleanly when training is done
+                engine.quit() # Quit the engine cleanly when training is done
             except Exception:
                 pass
 
-# Main method to parse arguments and start the training session
 if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train Chessomatic bandits against Stockfish.")
