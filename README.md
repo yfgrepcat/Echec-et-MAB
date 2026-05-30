@@ -78,6 +78,44 @@ python project/experiments/training.py --bandit-type basic_linucb --total-games 
 python project/experiments/training.py --bandit-type neural_linucb --total-games 100 --worker-id p100_sf10_neural --agent-stockfish-level 10 --opponent-stockfish-level 10
 ```
 
+## Run training final night 
+
+### Basic 300 stockfish 10 contre stockfish 8
+
+```bash
+python project/experiments/training.py --bandit-type basic_linucb --total-games 300 --worker-id p300_sf10_vs_sf8_basic --agent-stockfish-level 10 --opponent-stockfish-level 8
+```
+
+### Basic 300 stockfish 10 contre stockfish 10
+
+```bash
+python project/experiments/training.py --bandit-type basic_linucb --total-games 300 --worker-id p300_sf10_vs_sf10_basic --agent-stockfish-level 10 --opponent-stockfish-level 10
+```
+
+### Basic 300 stockfish 10 contre stockfish 12
+
+```bash
+python project/experiments/training.py --bandit-type basic_linucb --total-games 300 --worker-id p300_sf10_vs_sf12_basic --agent-stockfish-level 10 --opponent-stockfish-level 12
+```
+
+### Neural 300 stockfish 10 contre stockfish 8
+
+```bash
+python project/experiments/training.py --bandit-type neural_linucb --total-games 300 --worker-id p300_sf10_vs_sf8_neural --agent-stockfish-level 10 --opponent-stockfish-level 8
+```
+
+### Neural 300 stockfish 10 contre stockfish 10
+
+```bash
+python project/experiments/training.py --bandit-type neural_linucb --total-games 300 --worker-id p300_sf10_vs_sf10_neural --agent-stockfish-level 10 --opponent-stockfish-level 10
+```
+
+### Neural 300 stockfish 10 contre stockfish 12
+
+```bash
+python project/experiments/training.py --bandit-type neural_linucb --total-games 300 --worker-id p300_sf10_vs_sf12_neural --agent-stockfish-level 10 --opponent-stockfish-level 12
+```
+
 ## Run Benchmark 
 
 ### Basic LinUCB
@@ -97,7 +135,7 @@ python project/experiments/benchmark.py --bandit-type neural_linucb --model-path
 ### Basic LinUCB
 
 ```bash
-./.venv/bin/python project/experiments/analysis.py --worker-id p100_sf10_basic --bandit-type basic_linucb
+
 ```
 
 ### Neural LinUCB 

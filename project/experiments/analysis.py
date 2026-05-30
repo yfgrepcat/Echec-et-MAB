@@ -1,4 +1,5 @@
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -153,6 +154,7 @@ def _segment_summary(df, games_per_segment):
             "mab_flag_rate": round(float(games["mab_flagged"].mean()), 3),
             "opponent_flag_rate": round(float(games["opponent_flagged"].mean()), 3),
             "mean_mab_moves": round(float(games["mab_moves"].mean()), 1),
+            "mean_elapsed": round(float(games["mean_elapsed"].mean()), 3),
             "mean_final_white_clock": round(float(games["final_white_clock"].mean()), 2),
             "mean_reward": round(float(segment_moves["reward"].mean()), 4),
             "mean_move_reward": (
@@ -308,13 +310,32 @@ def _plot_outcome_rates(df, output_dir, show, games_per_segment):
     ax.grid(axis="y", alpha=0.3)
 
     ax2 = ax.twinx()
-    ax2.plot(x, segment["score_rate"], marker="o", color="#1f77b4", linewidth=2.5, label="Average score")
-    ax2.set_ylim(-0.05, 1.05)
-    ax2.set_ylabel("Average score (win=1, draw=0.5, loss=0)")
+    ax2.plot(
+        x,
+        segment["mean_reward"],
+        marker="o",
+        color="#1f77b4",
+        linewidth=2.0,
+        label="Mean reward",
+    )
+    ax2.set_ylabel("Mean reward")
+
+    ax3 = ax.twinx()
+    ax3.spines.right.set_position(("outward", 58))
+    ax3.plot(
+        x,
+        segment["mean_elapsed"],
+        marker="s",
+        color="#9467bd",
+        linewidth=2.0,
+        label="Mean game time",
+    )
+    ax3.set_ylabel("Mean game time")
 
     lines, labels_left = ax.get_legend_handles_labels()
     lines2, labels_right = ax2.get_legend_handles_labels()
-    ax.legend(lines + lines2, labels_left + labels_right, loc="upper right")
+    lines3, labels_third = ax3.get_legend_handles_labels()
+    ax.legend(lines + lines2 + lines3, labels_left + labels_right + labels_third, loc="upper right")
     ax.set_title("Outcome rates by training segment")
     _save_or_show(fig, output_dir, "outcome_rates_by_segment.png", show=show)
 
