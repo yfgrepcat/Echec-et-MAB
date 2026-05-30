@@ -90,14 +90,14 @@ class LinUCB:
         :param reward: Reward observed for the selected arm and context.
         :type reward: float
         """
-        num = (self.A_inv[arm] @ x) @ (x.T @ self.A_inv[arm])       # num is the matrix used to update A_a^-1 after observing a reward for arm a given context x, 
-                                                                    # Computed using the Sherman-Morrison formula. For the math, see https://en.wikipedia.org/wiki/Sherman%E2%80%93Morrison_formula
-                                                                    # Intuition : 
-                                                                    #   - We want to update A_a^-1 to reflect the new information we have about arm a after observing the reward for context x
-                                                                    #   - To do so, we update the inverse of A_a using the Sherman-Morrison formula, which allows us to update the inverse of a matrix after a rank-1 update (which is what happens when we add x * x^T to A_a)
-                                                                    #   - The formula is: A_a^-1_new = A_a^-1 - (A_a^-1 * x * x^T * A_a^-1) / (1 + x^T * A_a^-1 * x)
-                                                                    # --> Updating the inverse directly is more efficient than recomputing it from scratch after updating A_a, which would require inverting a matrix (O(n^3) operation)
+        num = (self.A_inv[arm] @ x) @ (x.T @ self.A_inv[arm])  # num is the matrix used to update A_a^-1 after observing a reward for arm a given context x, 
+                                                                        # Computed using the Sherman-Morrison formula. For the math, see https://en.wikipedia.org/wiki/Sherman%E2%80%93Morrison_formula
+                                                                        # Intuition : 
+                                                                        #   - We want to update A_a^-1 to reflect the new information we have about arm a after observing the reward for context x
+                                                                        #   - To do so, we update the inverse of A_a using the Sherman-Morrison formula, which allows us to update the inverse of a matrix after a rank-1 update (which is what happens when we add x * x^T to A_a)
+                                                                        #   - The formula is: A_a^-1_new = A_a^-1 - (A_a^-1 * x * x^T * A_a^-1) / (1 + x^T * A_a^-1 * x)
+                                                                        # --> Updating the inverse directly is more efficient than recomputing it from scratch after updating A_a, which would require inverting a matrix (O(n^3) operation)
         den = 1.0 + (x.T @ self.A_inv[arm] @ x).item()
         self.A_inv[arm] -= num / den
-        self.b[arm] += reward * x                                   # Update b_a by adding the observed reward weighted by the context x for arm a, which is used to update our estimate of the relationship between context features and rewards for arm a
-                                                                    # We can multiply the reward by x because b_a is the cumulative reward-weighted context for arm a, so we add the new reward weighted by the context to it; x is a colum vector and reward a scalar
+        self.b[arm] += reward * x # Update b_a by adding the observed reward weighted by the context x for arm a, which is used to update our estimate of the relationship between context features and rewards for arm a
+                                  # We can multiply the reward by x because b_a is the cumulative reward-weighted context for arm a, so we add the new reward weighted by the context to it; x is a colum vector and reward a scalar
