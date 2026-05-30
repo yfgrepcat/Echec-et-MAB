@@ -66,6 +66,8 @@ python project/gui/app.py
 
 ## Run training 
 
+Find below the commands to run training for different configurations. The trained models will be saved in `project/models/` and the logs in `project/logs/`.
+
 ### Basic LinUCB : agent Stockfish niveau 10 vs adversaire niveau 10, 100 parties
 
 ```bash
@@ -78,7 +80,9 @@ python project/experiments/training.py --bandit-type basic_linucb --total-games 
 python project/experiments/training.py --bandit-type neural_linucb --total-games 100 --worker-id p100_sf10_neural --agent-stockfish-level 10 --opponent-stockfish-level 10
 ```
 
-## Run training final night 
+## Final model training
+
+Here are the commands that were run to train the final models that were used for the benchmark and analysis. Each command runs a training session of 300 games against the specified Stockfish level, with either the basic or neural LinUCB agent.
 
 ### Basic 300 stockfish 10 contre stockfish 8
 
@@ -118,28 +122,32 @@ python project/experiments/training.py --bandit-type neural_linucb --total-games
 
 ## Run Benchmark 
 
+Benchmarking the trained models against Stockfish at levels 5, 8, 10, and 12. The benchmark will evaluate the performance of the trained agents against these different levels of Stockfish and generate logs for analysis.
+
 ### Basic LinUCB
 
 ```bash
-python project/experiments/benchmark.py --bandit-type basic_linucb --model-path project/models/worker_p100_sf10_basic.npz --agent-stockfish-level 10 --levels 5 8 10 12
+python project/experiments/benchmark.py --bandit-type basic_linucb --model-path project/models/worker_p300_sf10_basic.npz --agent-stockfish-level 10 --levels 5 8 10 12
 ```
 
 ### Neural LinUCB 
 
 ```bash
-python project/experiments/benchmark.py --bandit-type neural_linucb --model-path project/models/worker_p100_sf10_neural.npz --agent-stockfish-level 10 --levels 5 8 10 12
+python project/experiments/benchmark.py --bandit-type neural_linucb --model-path project/models/worker_p300_sf10_neural.npz --agent-stockfish-level 10 --levels 5 8 10 12
 ```
 
-## Run Analysis
+## Run Analysis (the graphs)
+
+Analyzing the training logs and benchmark results to generate insights and visualizations about the performance of the trained agents. This includes plotting learning curves, win rates, and time management statistics.
 
 ### Basic LinUCB
 
 ```bash
-
+./.venv/bin/python project/experiments/analysis.py --worker-id p300_sf10_basic --bandit-type basic_linucb
 ```
 
 ### Neural LinUCB 
 
 ```bash
-./.venv/bin/python project/experiments/analysis.py --worker-id p100_sf10_neural --bandit-type neural_linucb
+./.venv/bin/python project/experiments/analysis.py --worker-id p300_sf10_neural --bandit-type neural_linucb
 ```
